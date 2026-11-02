@@ -1,0 +1,1274 @@
+{
+  "name": "Bitbucket PR - AI Inline Review",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bitbucket-pr-review",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "c299f308-ccef-4fd2-97de-d65457a854bc",
+      "name": "Bitbucket PR Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "086f972f-bc1b-41fa-b055-003e3dd4f4bb"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3e797e04-79e2-4212-b6e5-9fe74a46d765",
+              "name": "BB_BASE_URL",
+              "value": "https://bitbucket.mycompany.local",
+              "type": "string"
+            },
+            {
+              "id": "226a0736-9ac5-4b85-9c33-a0dcc50f6f20",
+              "name": "CONTEXT_LINES",
+              "value": "10",
+              "type": "string"
+            },
+            {
+              "id": "0b0920ea-8d28-4e27-8b8d-63e9749cb8d9",
+              "name": "CHUNK_MAX_FILES",
+              "value": "5",
+              "type": "string"
+            },
+            {
+              "id": "9fb7af28-37cd-4dcb-b8b4-e3dc70c7c810",
+              "name": "CHUNK_MAX_CHARS",
+              "value": "40000",
+              "type": "string"
+            },
+            {
+              "id": "d0f8d3c7-d714-4172-b698-8046273a2bf0",
+              "name": "MAX_FILE_CHARS",
+              "value": "60000",
+              "type": "string"
+            },
+            {
+              "id": "4ed7e7a4-2de7-433f-8e84-603192006a36",
+              "name": "MAX_CHUNKS",
+              "value": "10",
+              "type": "string"
+            },
+            {
+              "id": "dd8731df-21eb-4d12-bc87-6568f123aea7",
+              "name": "REPO_RULES_PATH",
+              "value": ".ai-review.md",
+              "type": "string"
+            },
+            {
+              "id": "aecd6cfa-8428-40ac-b305-b9ef6be6875b",
+              "name": "GLOBAL_RULES",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "57564a98-b302-4b08-9de8-9fa643c259ee",
+              "name": "MAX_RULES_CHARS",
+              "value": "8000",
+              "type": "string"
+            },
+            {
+              "id": "a2dc34f6-5abf-42b1-a279-8c2641846300",
+              "name": "MIN_CONFIDENCE",
+              "value": "0.5",
+              "type": "string"
+            },
+            {
+              "id": "641bb6c3-f7d0-4ca7-bdd4-90c52108aa53",
+              "name": "VERIFY_FAIL_MODE",
+              "value": "keep_high",
+              "type": "string"
+            },
+            {
+              "id": "002ffd05-785c-48fd-a988-284ceddf7da8",
+              "name": "MAX_COMMENTS",
+              "value": "25",
+              "type": "string"
+            },
+            {
+              "id": "e19f2d34-5012-4d76-881a-d0aa851d502a",
+              "name": "TASK_SEVERITIES",
+              "value": "critical,high",
+              "type": "string"
+            },
+            {
+              "id": "e73ebe4c-0ea9-4a79-b05e-d51fb835f50d",
+              "name": "UNANCHORED_MODE",
+              "value": "drop",
+              "type": "string"
+            },
+            {
+              "id": "f0165015-14c1-4672-a5c5-9d9d2776ce65",
+              "name": "LINE_TOLERANCE",
+              "value": "3",
+              "type": "string"
+            },
+            {
+              "id": "edfec4db-4d76-460e-a8b7-5141c9439b88",
+              "name": "POST_FAILURE_NOTICE",
+              "value": "true",
+              "type": "string"
+            },
+            {
+              "id": "774a1845-4ad3-425f-b154-65c914e433d7",
+              "name": "IGNORE_PATH_REGEX",
+              "value": "package-lock\\.json$,yarn\\.lock$,\\.min\\.(js|css)$,(^|/)target/,(^|/)dist/,\\.(png|jpg|svg|ico)$,(^|/)generated/",
+              "type": "string"
+            },
+            {
+              "id": "b6638092-b1f8-4361-9f4f-ee6bd3468260",
+              "name": "PROJECT",
+              "value": "={{ $json.body.pullRequest.toRef.repository.project.key }}",
+              "type": "string"
+            },
+            {
+              "id": "5156f256-b4b9-4bf2-bdc7-34fb5d41f63a",
+              "name": "REPO",
+              "value": "={{ $json.body.pullRequest.toRef.repository.slug }}",
+              "type": "string"
+            },
+            {
+              "id": "3ae9c895-48d4-4a69-be98-d3310037a851",
+              "name": "PR_ID",
+              "value": "={{ String($json.body.pullRequest.id) }}",
+              "type": "string"
+            },
+            {
+              "id": "388427bf-e7a2-467b-9ea7-18c234cb3a8f",
+              "name": "FROM_HASH",
+              "value": "={{ $json.body.pullRequest.fromRef.latestCommit }}",
+              "type": "string"
+            },
+            {
+              "id": "0c93388e-8dc1-4006-975f-c102cdbf04c3",
+              "name": "TO_HASH",
+              "value": "={{ $json.body.pullRequest.toRef.latestCommit }}",
+              "type": "string"
+            },
+            {
+              "id": "5a87e9c1-d3d3-4849-b9ed-1f3def95e1fe",
+              "name": "PR_TITLE",
+              "value": "={{ $json.body.pullRequest.title }}",
+              "type": "string"
+            },
+            {
+              "id": "6857dc1e-00b7-4001-8dcd-8a5daa3b2065",
+              "name": "PR_DESCRIPTION",
+              "value": "={{ $json.body.pullRequest.description || '(no description)' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "788eae6a-06e6-46ad-b5fd-58b5e77863e5",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Config').first().json.BB_BASE_URL }}/rest/api/1.0/projects/{{ $('Config').first().json.PROJECT }}/repos/{{ $('Config').first().json.REPO }}/raw/{{ $('Config').first().json.REPO_RULES_PATH }}?at={{ $('Config').first().json.FROM_HASH }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 20000
+        }
+      },
+      "id": "c8afe622-a370-4571-8fc3-098b845712f9",
+      "name": "Get Repo Rules",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "REPLACE_BB",
+          "name": "Bitbucket Basic Auth"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "notes": "Reads the rules file from the PR's own (source) branch at its latest commit. 404 = no rules -> the rules reviewer is skipped."
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Config').first().json.BB_BASE_URL }}/rest/api/1.0/projects/{{ $('Config').first().json.PROJECT }}/repos/{{ $('Config').first().json.REPO }}/pull-requests/{{ $('Config').first().json.PR_ID }}/diff",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "contextLines",
+              "value": "={{ $('Config').first().json.CONTEXT_LINES }}"
+            },
+            {
+              "name": "whitespace",
+              "value": "ignore-all"
+            },
+            {
+              "name": "withComments",
+              "value": "false"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "fd84540b-cde1-4a42-87bb-8fc9dfc03c46",
+      "name": "Get PR Diff",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "REPLACE_BB",
+          "name": "Bitbucket Basic Auth"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// n8n Code node: \"Build Review Context\"   (Mode: Run Once for All Items)\n//\n// Parses the Bitbucket Data Center PR diff JSON and splits it into CHUNKS.\n// Output = one item per chunk; each AI agent runs once per item.\n//\n// Each item carries:\n//   - files[]       : canonical files of this chunk with GLOBAL ids (F1..Fn)\n//                     -> the ONLY source of truth for file paths\n//   - lineIndex     : { path: { \"<newLine>\": {lineType, text} } } for this chunk\n//                     -> every line Bitbucket will accept an inline comment on\n//   - annotatedDiff : this chunk's diff with explicit new-file line numbers\n//   - repoRules     : GLOBAL_RULES + repo rules file (from the PR SOURCE branch)\n//   - hasRules      : false when there are no rules -> the rules reviewer is skipped\n// ============================================================================\n\nconst cfg = $('Config').first().json;\nconst diff = $input.first().json;\n\nconst num = (v, d) => (Number.isFinite(Number(v)) && String(v).trim() !== '' ? Number(v) : d);\nconst IGNORE = String(cfg.IGNORE_PATH_REGEX || '')\n  .split(',').map(s => s.trim()).filter(Boolean).map(s => new RegExp(s));\nconst CHUNK_MAX_FILES = num(cfg.CHUNK_MAX_FILES, 5);\nconst CHUNK_MAX_CHARS = num(cfg.CHUNK_MAX_CHARS, 40000);\nconst MAX_FILE_CHARS = num(cfg.MAX_FILE_CHARS, 60000);\nconst MAX_CHUNKS = num(cfg.MAX_CHUNKS, 10);\nconst MAX_RULES_CHARS = num(cfg.MAX_RULES_CHARS, 8000);\n\n// ---------- repo rules (fetched by \"Get Repo Rules\", 404 = no rules) --------\nlet repoRules = '';\ntry {\n  const r = $('Get Repo Rules').first().json;\n  const status = Number(r.statusCode ?? 200);\n  const content = r.data ?? r.body;   // text response -> \"data\"; keep \"body\" as fallback\n  if (status === 200 && typeof content === 'string') repoRules = content.trim();\n} catch (e) { /* node failed or not executed -> no repo rules */ }\nconst globalRules = String(cfg.GLOBAL_RULES || '').trim();\nlet rules = [globalRules && `General rules:\\n${globalRules}`, repoRules && `Repository rules (${cfg.REPO_RULES_PATH}):\\n${repoRules}`]\n  .filter(Boolean).join('\\n\\n');\nif (rules.length > MAX_RULES_CHARS) rules = rules.slice(0, MAX_RULES_CHARS) + '\\n... (rules truncated)';\n\n// ---------- parse diff into per-file blocks ---------------------------------\nconst pathOf = ref => (ref && (ref.toString || (ref.components || []).join('/'))) || null;\nconst parsed = [];\nconst skipped = [];\n\nconst diffs = [...(diff.diffs || [])].sort((a, b) =>\n  String(pathOf(a.destination) || pathOf(a.source)).localeCompare(String(pathOf(b.destination) || pathOf(b.source))));\n\nfor (const d of diffs) {\n  const newPath = pathOf(d.destination);\n  const oldPath = pathOf(d.source);\n  const path = newPath || oldPath;\n  if (!path) continue;\n  const changeType = !oldPath ? 'ADD' : !newPath ? 'DELETE' : oldPath !== newPath ? 'RENAME' : 'MODIFY';\n\n  if (IGNORE.some(rx => rx.test(path))) { skipped.push({ path, reason: 'ignored by pattern' }); continue; }\n  if (d.binary) { skipped.push({ path, reason: 'binary' }); continue; }\n  if (changeType === 'DELETE') { skipped.push({ path, reason: 'deleted file' }); continue; }\n\n  const idx = {};\n  let body = '';\n  for (const h of d.hunks || []) {\n    body += `@@ -${h.sourceLine},${h.sourceSpan} +${h.destinationLine},${h.destinationSpan} @@\\n`;\n    for (const seg of h.segments || []) {\n      for (const l of seg.lines || []) {\n        const text = l.line ?? '';\n        if (seg.type === 'REMOVED') {\n          body += `-       | ${text}\\n`;\n        } else {\n          idx[String(l.destination)] = { lineType: seg.type, text };\n          body += `${seg.type === 'ADDED' ? '+' : ' '}${String(l.destination).padStart(6)} | ${text}\\n`;\n        }\n      }\n    }\n  }\n  if (d.truncated) body += '... (diff truncated by Bitbucket; fetch the full file if needed)\\n';\n  if (!body) { skipped.push({ path, reason: 'no textual changes' }); continue; }\n  if (body.length > MAX_FILE_CHARS) { skipped.push({ path, reason: `diff too large (${body.length} chars)` }); continue; }\n\n  parsed.push({ path, srcPath: changeType === 'RENAME' ? oldPath : null, changeType, oldPath, body, idx });\n}\n\n// ---------- global file ids, then chunk (files sorted by path keep modules together)\nparsed.forEach((p, i) => { p.fid = `F${i + 1}`; });\n\nconst chunks = [];\nlet cur = null;\nfor (const p of parsed) {\n  const header = `\\n### ${p.fid}  ${p.path}  (${p.changeType}${p.changeType === 'RENAME' ? ` from ${p.oldPath}` : ''})\\n`;\n  const block = header + p.body;\n  if (!cur || cur.files.length >= CHUNK_MAX_FILES || (cur.chars + block.length > CHUNK_MAX_CHARS && cur.files.length > 0)) {\n    cur = { files: [], chars: 0, text: '', lineIndex: {} };\n    chunks.push(cur);\n  }\n  cur.files.push({ fid: p.fid, path: p.path, srcPath: p.srcPath, changeType: p.changeType });\n  cur.lineIndex[p.path] = p.idx;\n  cur.text += block;\n  cur.chars += block.length;\n}\n\nif (chunks.length > MAX_CHUNKS) {\n  for (const c of chunks.splice(MAX_CHUNKS)) for (const f of c.files) skipped.push({ path: f.path, reason: 'PR too large (MAX_CHUNKS reached)' });\n}\n\nif (!chunks.length) return [{ json: { hasFiles: false, hasRules: false, skipped } }];\n\nconst allPaths = chunks.flatMap(c => c.files.map(f => `${f.fid} = ${f.path}`));\nconst skippedList = skipped.map(s => `- ${s.path} (${s.reason})`).join('\\n') || '(none)';\n\nreturn chunks.map((c, i) => ({\n  json: {\n    hasFiles: true,\n    hasRules: rules.length > 0,\n    chunkIndex: i + 1,\n    chunkCount: chunks.length,\n    files: c.files,\n    lineIndex: c.lineIndex,\n    skipped,\n    annotatedDiff: c.text,\n    fileList: c.files.map(f => `${f.fid} = ${f.path}`).join('\\n'),\n    otherFiles: allPaths.filter(p => !c.files.some(f => p.startsWith(f.fid + ' '))).join('\\n') || '(none)',\n    skippedList,\n    repoRules: rules,\n  },\n}));\n"
+      },
+      "id": "2cea565a-cb5f-4702-ba38-bc3e20fa72b9",
+      "name": "Build Review Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "60e92732-a42c-4917-a914-5b2c23c53b2f",
+              "leftValue": "={{ $json.hasFiles }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9b830089-9cc6-407e-b36c-172a9d2badb7",
+      "name": "Has Reviewable Files?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "hasOutputParser": true,
+        "text": "=PR: {{ $('Config').first().json.PR_TITLE }}\nPart {{ $json.chunkIndex }} of {{ $json.chunkCount }}\n\nDescription:\n{{ $('Config').first().json.PR_DESCRIPTION }}\n\nFILE LIST (review these):\n{{ $json.fileList }}\n\nOTHER FILES in this PR (reviewed in other parts - context only, do not report on them):\n{{ $json.otherFiles }}\n\nFiles excluded from the review:\n{{ $json.skippedList }}\n\nANNOTATED DIFF:\n{{ $json.annotatedDiff }}\n\nReview this part and return the JSON object described in your instructions.",
+        "options": {
+          "systemMessage": "You are a senior code reviewer for a Java / Spring Boot microservices codebase. You review ONE part of a pull request (large PRs are split into parts reviewed separately) and report concrete, actionable problems.\n\n## What you receive\n- PR title and description\n- OTHER FILES in the PR that are reviewed in other parts. You may fetch them for context but do not report issues in them.\n- A FILE LIST mapping file IDs to paths, e.g. `F3 = services/order-service/src/main/java/.../OrderService.java`\n- An ANNOTATED DIFF. Every line that exists in the new version is prefixed with its line number:\n    `+   121 | code`   -> line 121, ADDED in this PR\n    `    120 | code`   -> line 120, unchanged context\n    `-       | code`   -> REMOVED line (no new line number, you cannot comment on it)\n\n## Tools\n- get_file_content(path): full content of a file at the PR source commit. Use it when you need surrounding code (class fields, other methods, imports) to judge a change.\n- list_files(directory): list files under a directory, to find related classes, configs, tests.\nUse tools only when they change your verdict. Do not fetch every file.\n\n## What to report\nBugs, security issues (injection, secrets, authz), concurrency / transaction problems, resource leaks, broken error handling, null-safety, performance traps (N+1, unbounded queries), API/contract breaks, violations of the project's existing patterns and conventions.\nDo NOT report: formatting, naming nitpicks, missing comments, things a linter catches, praise, or a PR summary. Compliance with written team rules is checked by a separate reviewer; do not try to guess those rules.\n\n## LOCATION RULES (critical - comments are posted inline by a program)\n1. `file_id` MUST be one of the IDs from the FILE LIST.\n2. `line` MUST be a line number printed in the ANNOTATED DIFF for that file, preferably a `+` line. Never a number you computed from get_file_content output.\n3. `code_snippet` MUST be copied verbatim from that single diff line (the text after `| `), at least 10 characters. It is used to verify and correct the location.\n4. If the problem lives in code outside the diff, attach it to the changed line that causes or exposes it.\n5. One issue = one line. If the same problem repeats, report the first occurrence and mention the others in the description.\n\n## Output\nReturn ONLY a JSON object, no markdown fence, no prose before or after:\n{\"issues\":[{\"file_id\":\"F1\",\"line\":121,\"code_snippet\":\"exact text of line 121\",\"severity\":\"critical|high|medium|low\",\"category\":\"bug|security|performance|concurrency|architecture|error-handling|maintainability\",\"title\":\"short title (max 80 chars)\",\"description\":\"what is wrong and why it matters\",\"suggestion\":\"concrete fix, may include a short code sample\",\"confidence\":0.9}]}\n`confidence` (0.0-1.0) = how sure you are that this is a real problem given the code you actually saw. Below 0.5 means you are guessing - leave it out instead.\nIf there is nothing worth reporting return {\"issues\":[]}.\n",
+          "maxIterations": 15
+        }
+      },
+      "id": "25ccaa1f-24a5-4eb2-a5d9-71013895b7fe",
+      "name": "AI Code Reviewer",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        1340,
+        220
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "notes": "General review (bugs, security, performance...). Repo rules are NOT given to it. Runs once per chunk."
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "qwen3-coder"
+        },
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 8192,
+          "timeout": 300000,
+          "maxRetries": 2
+        }
+      },
+      "id": "00c16615-fcb6-45de-9e55-876c25a9bb0a",
+      "name": "Qwen - Reviewer",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1140,
+        480
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "REPLACE_LLM",
+          "name": "Internal Qwen (OpenAI-compatible)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Returns the full raw content of one repository file at the PR source commit. Input: the full repository path exactly as written in the FILE LIST (e.g. services/order-service/src/main/java/com/acme/OrderService.java).",
+        "url": "={{ $('Config').first().json.BB_BASE_URL }}/rest/api/1.0/projects/{{ $('Config').first().json.PROJECT }}/repos/{{ $('Config').first().json.REPO }}/raw/{{ $fromAI('path', 'Full repository path of the file, no leading slash', 'string') }}?at={{ $('Config').first().json.FROM_HASH }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "151f3761-4e8b-488e-9637-e6dd8dcf125e",
+      "name": "get_file_content",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1300,
+        480
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "REPLACE_BB",
+          "name": "Bitbucket Basic Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Lists all file paths under a repository directory at the PR source commit (recursive). Input: directory path without leading or trailing slash, e.g. services/order-service/src/main/java/com/acme/order",
+        "url": "={{ $('Config').first().json.BB_BASE_URL }}/rest/api/1.0/projects/{{ $('Config').first().json.PROJECT }}/repos/{{ $('Config').first().json.REPO }}/files/{{ $fromAI('directory', 'Repository directory path, no leading/trailing slash', 'string') }}?at={{ $('Config').first().json.FROM_HASH }}&limit=1000",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "61bf9bd0-e912-4f40-8b8f-a220f0b3bf43",
+      "name": "list_files",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        480
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "REPLACE_BB",
+          "name": "Bitbucket Basic Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "5e982d72-bc14-4637-a842-6a9105ce17dc",
+      "name": "Auto-fixing Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserAutofixing",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        480
+      ],
+      "notes": "If the reviewer returns malformed JSON, asks the model once to repair it."
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "qwen3-coder"
+        },
+        "options": {
+          "temperature": 0,
+          "maxTokens": 8192,
+          "timeout": 300000,
+          "maxRetries": 2
+        }
+      },
+      "id": "065b21ff-dc48-4192-beee-46b24318feeb",
+      "name": "Qwen - JSON Fixer",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1540,
+        700
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "REPLACE_LLM",
+          "name": "Internal Qwen (OpenAI-compatible)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"issues\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"file_id\": {\n            \"type\": \"string\"\n          },\n          \"line\": {\n            \"type\": \"integer\"\n          },\n          \"code_snippet\": {\n            \"type\": \"string\"\n          },\n          \"severity\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"critical\",\n              \"high\",\n              \"medium\",\n              \"low\"\n            ]\n          },\n          \"category\": {\n            \"type\": \"string\"\n          },\n          \"title\": {\n            \"type\": \"string\"\n          },\n          \"description\": {\n            \"type\": \"string\"\n          },\n          \"suggestion\": {\n            \"type\": \"string\"\n          },\n          \"confidence\": {\n            \"type\": \"number\"\n          }\n        },\n        \"required\": [\n          \"file_id\",\n          \"line\",\n          \"severity\",\n          \"title\"\n        ]\n      }\n    }\n  },\n  \"required\": [\n    \"issues\"\n  ]\n}"
+      },
+      "id": "9e9ea93f-848d-4578-8141-371b2746666c",
+      "name": "Issues Schema",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        1720,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// n8n Code node: \"Rules Review Input\"   (Mode: Run Once for All Items)\n//\n// The general reviewer's output replaced the chunk data, so re-emit the chunks\n// from \"Build Review Context\" (same order) for the rules reviewer.\n// \"Has Repo Rules?\" then skips the rules reviewer when hasRules is false.\n// ============================================================================\nreturn $('Build Review Context').all().map(i => ({ json: i.json }));\n"
+      },
+      "id": "7494434e-fb17-42f4-9477-f8028bcf79d2",
+      "name": "Rules Review Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1860,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0c9141e9-6107-4551-8c77-282181421208",
+              "leftValue": "={{ $json.hasRules }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a630cafe-5bb6-42c4-b6c8-a01b555f5983",
+      "name": "Has Repo Rules?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2080,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "hasOutputParser": true,
+        "text": "=PR: {{ $('Config').first().json.PR_TITLE }}\nPart {{ $json.chunkIndex }} of {{ $json.chunkCount }}\n\nDescription:\n{{ $('Config').first().json.PR_DESCRIPTION }}\n\nREVIEW RULES:\n{{ $json.repoRules }}\n\nFILE LIST (check these):\n{{ $json.fileList }}\n\nOTHER FILES in this PR (checked in other parts - context only, do not report on them):\n{{ $json.otherFiles }}\n\nANNOTATED DIFF:\n{{ $json.annotatedDiff }}\n\nCheck this part against the REVIEW RULES and return the JSON object described in your instructions.",
+        "options": {
+          "systemMessage": "You are a rules-compliance reviewer for a Java / Spring Boot microservices codebase. Your ONLY job is to check ONE part of a pull request (large PRs are split into parts reviewed separately) against the team's written REVIEW RULES.\n\n## What you receive\n- PR title and description\n- REVIEW RULES: the team / repository rules. They are your ONLY review criteria.\n- OTHER FILES in the PR that are checked in other parts. You may fetch them for context but do not report issues in them.\n- A FILE LIST mapping file IDs to paths, e.g. `F3 = services/order-service/src/main/java/.../OrderService.java`\n- An ANNOTATED DIFF. Every line that exists in the new version is prefixed with its line number:\n    `+   121 | code`   -> line 121, ADDED in this PR\n    `    120 | code`   -> line 120, unchanged context\n    `-       | code`   -> REMOVED line (no new line number, you cannot comment on it)\n\n## Tools\n- rules_get_file_content(path): full content of a file at the PR source commit.\n- rules_list_files(directory): list files under a directory.\nUse them only when a rule cannot be judged from the diff alone (e.g. a rule about class-level annotations, a required test class, a required config entry). Do not fetch every file.\n\n## How to review\n1. Read the REVIEW RULES and decide which ones apply to the files in this part (by language, layer, path).\n2. Check every added or changed line against the applicable rules.\n3. Report each concrete violation in code added or changed by this PR.\n\n## What NOT to report\n- Bugs, security, performance or style problems that no rule mentions - another reviewer covers those.\n- Violations on unchanged context lines, unless this PR's change makes them worse.\n- Rules that do not apply to the file (wrong language, layer or module).\n- Guesses: if you cannot see code that breaks the rule, do not report it.\n\n## Severity\nUse the severity the rule itself states, if any. Otherwise: high if the rule is marked mandatory / must / blocking, medium for everything else, low for rules phrased as recommendations (\"prefer\", \"should consider\").\n\n## LOCATION RULES (critical - comments are posted inline by a program)\n1. `file_id` MUST be one of the IDs from the FILE LIST.\n2. `line` MUST be a line number printed in the ANNOTATED DIFF for that file, preferably a `+` line. Never a number you computed from rules_get_file_content output.\n3. `code_snippet` MUST be copied verbatim from that single diff line (the text after `| `), at least 10 characters. It is used to verify and correct the location.\n4. If the problem lives in code outside the diff, attach it to the changed line that causes or exposes it.\n5. One issue = one line. If the same problem repeats, report the first occurrence and mention the others in the description.\n\n## Output\nReturn ONLY a JSON object, no markdown fence, no prose before or after:\n{\"issues\":[{\"file_id\":\"F1\",\"line\":121,\"code_snippet\":\"exact text of line 121\",\"rule\":\"the broken rule, quoted from REVIEW RULES (max 300 chars)\",\"severity\":\"critical|high|medium|low\",\"category\":\"repo-rule\",\"title\":\"short title (max 80 chars)\",\"description\":\"how this code breaks the rule\",\"suggestion\":\"compliant version, may include a short code sample\",\"confidence\":0.9}]}\n`rule` is mandatory: an issue you cannot tie to a specific written rule is not a rule violation - leave it out.\n`confidence` (0.0-1.0) = how sure you are that the shown code really breaks the rule. Below 0.5 means you are guessing - leave it out instead.\nIf the code follows all applicable rules return {\"issues\":[]}.\n",
+          "maxIterations": 10
+        }
+      },
+      "id": "ad23f1be-0a9b-4149-9df8-dcbbcd45f9f8",
+      "name": "AI Rules Reviewer",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        2320,
+        640
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "notes": "Checks the diff ONLY against GLOBAL_RULES + the repo rules file. Skipped when there are no rules. Runs once per chunk."
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "qwen3-coder"
+        },
+        "options": {
+          "temperature": 0,
+          "maxTokens": 8192,
+          "timeout": 300000,
+          "maxRetries": 2
+        }
+      },
+      "id": "1d8fd43a-e3de-4d43-a217-0da9c9615752",
+      "name": "Qwen - Rules Reviewer",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        2120,
+        900
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "REPLACE_LLM",
+          "name": "Internal Qwen (OpenAI-compatible)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Returns the full raw content of one repository file at the PR source commit. Input: the full repository path exactly as written in the FILE LIST (e.g. services/order-service/src/main/java/com/acme/OrderService.java).",
+        "url": "={{ $('Config').first().json.BB_BASE_URL }}/rest/api/1.0/projects/{{ $('Config').first().json.PROJECT }}/repos/{{ $('Config').first().json.REPO }}/raw/{{ $fromAI('path', 'Full repository path of the file, no leading slash', 'string') }}?at={{ $('Config').first().json.FROM_HASH }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "89cae502-2ebc-45e2-8c94-fd4bf6efa147",
+      "name": "rules_get_file_content",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        2280,
+        900
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "REPLACE_BB",
+          "name": "Bitbucket Basic Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Lists all file paths under a repository directory at the PR source commit (recursive). Input: directory path without leading or trailing slash, e.g. services/order-service/src/main/java/com/acme/order",
+        "url": "={{ $('Config').first().json.BB_BASE_URL }}/rest/api/1.0/projects/{{ $('Config').first().json.PROJECT }}/repos/{{ $('Config').first().json.REPO }}/files/{{ $fromAI('directory', 'Repository directory path, no leading/trailing slash', 'string') }}?at={{ $('Config').first().json.FROM_HASH }}&limit=1000",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "ca427642-1eaf-46fb-a520-3cbf7ae4cca6",
+      "name": "rules_list_files",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        2420,
+        900
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "REPLACE_BB",
+          "name": "Bitbucket Basic Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "687aed3f-ec69-481f-a61e-eda6f65d1f03",
+      "name": "Rules Auto-fixing Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserAutofixing",
+      "typeVersion": 1,
+      "position": [
+        2580,
+        900
+      ],
+      "notes": "If the reviewer returns malformed JSON, asks the model once to repair it."
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "qwen3-coder"
+        },
+        "options": {
+          "temperature": 0,
+          "maxTokens": 8192,
+          "timeout": 300000,
+          "maxRetries": 2
+        }
+      },
+      "id": "171591b4-bf5e-4927-b2b8-71c29113f4eb",
+      "name": "Qwen - Rules JSON Fixer",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        2520,
+        1120
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "REPLACE_LLM",
+          "name": "Internal Qwen (OpenAI-compatible)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"issues\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"file_id\": {\n            \"type\": \"string\"\n          },\n          \"line\": {\n            \"type\": \"integer\"\n          },\n          \"code_snippet\": {\n            \"type\": \"string\"\n          },\n          \"rule\": {\n            \"type\": \"string\"\n          },\n          \"severity\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"critical\",\n              \"high\",\n              \"medium\",\n              \"low\"\n            ]\n          },\n          \"category\": {\n            \"type\": \"string\"\n          },\n          \"title\": {\n            \"type\": \"string\"\n          },\n          \"description\": {\n            \"type\": \"string\"\n          },\n          \"suggestion\": {\n            \"type\": \"string\"\n          },\n          \"confidence\": {\n            \"type\": \"number\"\n          }\n        },\n        \"required\": [\n          \"file_id\",\n          \"line\",\n          \"rule\",\n          \"severity\",\n          \"title\"\n        ]\n      }\n    }\n  },\n  \"required\": [\n    \"issues\"\n  ]\n}"
+      },
+      "id": "e27b3dd3-71d1-46d0-9e59-18de198b0527",
+      "name": "Rules Issues Schema",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        2700,
+        1120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// n8n Code node: \"Resolve Anchors\"   (Mode: Run Once for All Items)\n//\n// Collects the results of BOTH reviewers and outputs ONE item with all candidates.\n//   AI Code Reviewer  -> source 'general'\n//   AI Rules Reviewer -> source 'rules'   (only when repo rules exist)\n// The LLM's location is treated as a HINT only:\n//   * path -> always taken from the parsed diff (file_id lookup, or the LLM's\n//             path matched against real diff paths). Never the raw LLM string.\n//   * line -> must exist in the diff line index. If the LLM's line is wrong,\n//             code_snippet is searched in the real diff lines; nearest match wins.\n// Unpinnable issues: UNANCHORED_MODE = 'drop' | 'file' (file-level, real path).\n//\n// IMPORTANT: only literal $('Node Name') calls in this node. A dynamic $(name)\n// makes the task runner ship the ENTIRE execution data (all LLM sub-node runs)\n// and the node hangs.\n// ============================================================================\n\nconst cfg = $('Config').first().json;\nconst chunkItems = $('Build Review Context').all().map(i => i.json);\nconst rulesText = chunkItems[0]?.repoRules || '';\n\nconst num = (v, d) => (Number.isFinite(Number(v)) && String(v).trim() !== '' ? Number(v) : d);\nconst UNANCHORED_MODE = cfg.UNANCHORED_MODE || 'drop';\nconst NEAR_WINDOW = num(cfg.LINE_TOLERANCE, 3);\nconst MIN_CONFIDENCE = num(cfg.MIN_CONFIDENCE, 0.5);\nconst CONTEXT_RADIUS = 8;\n\n// ---------- merge per-chunk context ----------------------------------------\nconst files = chunkItems.flatMap(c => c.files || []);\nconst lineIndex = Object.assign({}, ...chunkItems.map(c => c.lineIndex || {}));\nconst byFid = Object.fromEntries(files.map(f => [f.fid.toUpperCase(), f]));\nconst byPath = Object.fromEntries(files.map(f => [f.path, f]));\n\n// ---------- parse agent output robustly ------------------------------------\nfunction extractIssues(out) {\n  if (Array.isArray(out)) return out;\n  if (out && typeof out === 'object') {\n    if (Array.isArray(out.issues)) return out.issues;\n    if (out.output !== undefined) return extractIssues(out.output);\n    return null;\n  }\n  if (typeof out !== 'string') return null;\n  let s = out.replace(/<think>[\\s\\S]*?<\\/think>/gi, '').replace(/```(?:json)?/gi, '').trim();\n  for (const [open, close] of [['{', '}'], ['[', ']']]) {\n    const a = s.indexOf(open), b = s.lastIndexOf(close);\n    if (a !== -1 && b > a) {\n      try { const r = extractIssues(JSON.parse(s.slice(a, b + 1))); if (r) return r; } catch (e) { /* next */ }\n    }\n  }\n  return null;   // null = unparseable (different from \"no issues\")\n}\n\n// ---------- collect reviewer outputs (literal node names only) -------------\n// .all() throws when the node did not run; empty also means \"did not run\"\n// (an agent emits one item per input chunk, errors included).\nconst safeAll = fn => { try { const a = fn(); return a && a.length ? a.map(i => i.json) : null; } catch (e) { return null; } };\nconst REVIEWERS = [\n  { source: 'general', items: safeAll(() => $('AI Code Reviewer').all()) },\n  { source: 'rules',   items: safeAll(() => $('AI Rules Reviewer').all()) },\n];\n\nconst report = { chunks: chunkItems.length, rulesReview: rulesText ? 'not run' : 'skipped (no rules)',\n                 failedChunks: [], received: { general: 0, rules: 0 }, lowConfidence: 0,\n                 anchored: 0, relocated: 0, fileLevel: 0, duplicates: 0, dropped: [] };\nconst issues = [];\n\nfor (const r of REVIEWERS) {\n  const agentItems = r.items;\n  if (!agentItems) continue;\n  if (r.source === 'rules') report.rulesReview = 'ran';\n  agentItems.forEach((a, i) => {\n    const chunkNo = chunkItems[i]?.chunkIndex ?? i + 1;\n    const chunkFiles = (chunkItems[i]?.files || []).map(f => f.path);\n    if (a.error) {\n      report.failedChunks.push({ source: r.source, chunk: chunkNo, files: chunkFiles, error: String(a.error.message || a.error).slice(0, 300) });\n      return;\n    }\n    const parsed = extractIssues(a.output !== undefined ? a.output : a);\n    if (parsed === null) {\n      report.failedChunks.push({ source: r.source, chunk: chunkNo, files: chunkFiles, error: 'agent output was not valid JSON' });\n      return;\n    }\n    parsed.forEach(x => issues.push({ ...x, _chunk: chunkNo, _source: r.source }));\n    report.received[r.source] += parsed.length;\n  });\n}\n\n// ---------- location resolution --------------------------------------------\nconst norm = s => String(s ?? '').replace(/\\s+/g, ' ').trim();\n\nfunction resolveFile(issue) {\n  const fid = String(issue.file_id ?? '').trim().toUpperCase();\n  if (byFid[fid]) return { file: byFid[fid], how: 'file_id' };\n  const p = String(issue.path ?? issue.file ?? '').trim().replace(/^\\/+/, '').replace(/^[ab]\\//, '');\n  if (!p) return null;\n  if (byPath[p]) return { file: byPath[p], how: 'exact_path' };\n  const cands = files.filter(f => f.path.endsWith('/' + p) || p.endsWith('/' + f.path));\n  return cands.length === 1 ? { file: cands[0], how: 'suffix_path' } : null;\n}\n\nfunction resolveLine(path, claimed, snippet) {\n  const idx = lineIndex[path] || {};\n  const claimedNum = Number.parseInt(claimed, 10);\n  const snip = norm(snippet);\n  const entry = idx[String(claimedNum)];\n  const t = entry ? norm(entry.text) : '';\n\n  if (entry && (!snip || t.includes(snip) || (t.length > 3 && snip.includes(t)))) {\n    return { line: claimedNum, lineType: entry.lineType, how: 'exact' };\n  }\n  if (snip.length >= 4) {\n    const hits = Object.entries(idx)\n      .filter(([, v]) => norm(v.text).includes(snip) || (norm(v.text).length > 8 && snip.includes(norm(v.text))))\n      .map(([n, v]) => ({ n: Number(n), v }))\n      .sort((x, y) =>\n        (x.v.lineType === 'ADDED' ? 0 : 1) - (y.v.lineType === 'ADDED' ? 0 : 1) ||\n        Math.abs(x.n - (claimedNum || 0)) - Math.abs(y.n - (claimedNum || 0)));\n    if (hits.length) return { line: hits[0].n, lineType: hits[0].v.lineType, how: 'snippet_relocated' };\n  }\n  if (!snip && Number.isFinite(claimedNum)) {\n    for (let d = 1; d <= NEAR_WINDOW; d++) {\n      for (const n of [claimedNum - d, claimedNum + d]) {\n        if (idx[String(n)]?.lineType === 'ADDED') return { line: n, lineType: 'ADDED', how: `nearest_added(${d})` };\n      }\n    }\n  }\n  return null;\n}\n\nfunction codeContext(path, line) {\n  const idx = lineIndex[path] || {};\n  if (!line) return '(file-level issue, no inline context)';\n  const out = [];\n  for (let n = line - CONTEXT_RADIUS; n <= line + CONTEXT_RADIUS; n++) {\n    const e = idx[String(n)];\n    if (e) out.push(`${n === line ? '>>' : '  '}${e.lineType === 'ADDED' ? '+' : ' '}${String(n).padStart(6)} | ${e.text}`);\n  }\n  return out.join('\\n');\n}\n\n// ---------- build candidates -----------------------------------------------\nconst seen = new Set();\nconst candidates = [];\n\nfor (const issue of issues) {\n  const source = issue._source;\n  const conf = Number(issue.confidence);\n  if (Number.isFinite(conf) && conf < MIN_CONFIDENCE) { report.lowConfidence++; continue; }\n\n  let f = resolveFile(issue);\n  let loc = f ? resolveLine(f.file.path, issue.line, issue.code_snippet) : null;\n\n  // wrong / unknown file id: accept another file only if the snippet matches lines in exactly ONE file of the PR\n  if (!loc && norm(issue.code_snippet).length >= 10) {\n    const owners = files.filter(x => (!f || x.path !== f.file.path) && resolveLine(x.path, null, issue.code_snippet));\n    if (owners.length === 1) {\n      f = { file: owners[0], how: 'snippet_file_match' };\n      loc = resolveLine(f.file.path, issue.line, issue.code_snippet);\n    }\n  }\n\n  if (!f) { report.dropped.push({ source, reason: 'unknown file', path: issue.path, file_id: issue.file_id, title: issue.title }); continue; }\n  const path = f.file.path;   // <- from the diff, never from the LLM\n\n  if (!loc && UNANCHORED_MODE !== 'file') {\n    report.dropped.push({ source, reason: 'line not in diff', path, line: issue.line, title: issue.title });\n    continue;\n  }\n  const line = loc ? loc.line : null;\n  const key = `${source}:${path}:${line ?? 'file'}:${norm(issue.title).toLowerCase()}`;\n  if (seen.has(key)) { report.duplicates++; continue; }\n  seen.add(key);\n\n  if (!loc) report.fileLevel++;\n  else if (loc.how === 'exact') report.anchored++;\n  else report.relocated++;\n\n  candidates.push({\n    id: `C${candidates.length + 1}`,\n    source,\n    rule: source === 'rules' ? norm(issue.rule).slice(0, 400) : null,\n    path, srcPath: f.file.srcPath, line, lineType: loc?.lineType ?? null,\n    resolution: `${f.how}/${loc ? loc.how : 'file_level'}`,\n    claimedLine: issue.line ?? null,\n    severity: String(issue.severity || 'medium').toLowerCase(),\n    category: issue.category || (source === 'rules' ? 'repo-rule' : null),\n    confidence: Number.isFinite(conf) ? conf : null,\n    title: norm(issue.title) || 'Issue',\n    description: String(issue.description || '').trim(),\n    suggestion: String(issue.suggestion || '').trim(),\n    context: codeContext(path, line),\n  });\n}\n\n// ---------- prompt for the verification pass -------------------------------\nconst hasRuleCandidates = candidates.some(c => c.source === 'rules');\nconst verifyPrompt =\n  (hasRuleCandidates ? `REVIEW RULES (judge RULE VIOLATION candidates only against these):\\n${rulesText}\\n\\n` : '') +\n  'Candidate issues:\\n\\n' +\n  candidates.map(c =>\n    `=== ${c.id} | ${c.source === 'rules' ? 'RULE VIOLATION' : 'CODE ISSUE'} | ${c.severity.toUpperCase()} | ${c.path}${c.line ? `:${c.line}` : ''}\\n` +\n    (c.rule ? `Rule: ${c.rule}\\n` : '') +\n    `Title: ${c.title}\\nClaim: ${c.description}\\n` +\n    (c.suggestion ? `Suggested fix: ${c.suggestion}\\n` : '') +\n    `Code (>> marks the commented line, + = added in this PR):\\n${c.context}\\n`).join('\\n');\n\nreturn [{ json: { hasCandidates: candidates.length > 0, candidates, verifyPrompt, report } }];\n"
+      },
+      "id": "056bf4c3-a736-4910-88be-e57406c130e6",
+      "name": "Resolve Anchors",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2700,
+        220
+      ],
+      "notes": "Uses only literal $('Node Name') calls - a dynamic $(name) makes the task runner ship the whole execution data and the node hangs."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "5f41e455-683a-4b82-94ed-ab1d82d0ff10",
+              "leftValue": "={{ $json.hasCandidates }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "bd59db03-cca4-4ddf-8da3-9df0d19a097c",
+      "name": "Has Candidates?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2920,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.verifyPrompt }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are a strict second reviewer. Other AIs reviewed a pull request and produced the candidate issues below. Your job is to REJECT false positives before they are posted as comments to the developers.\n\nEach candidate has a type:\n- CODE ISSUE: a general code problem.\n- RULE VIOLATION: a claimed violation of the team's REVIEW RULES (shown above the candidates, together with the quoted rule).\n\nFor each candidate, look at the code shown and decide:\n- keep = true  only if the problem is real, is visible in (or directly caused by) the shown code, and a senior engineer would agree it should be fixed in this PR.\n  For a RULE VIOLATION: keep only if the quoted rule really exists in REVIEW RULES, applies to this file, and the shown code actually breaks it. Do not reject a rule violation just because it looks like a style matter - the team chose that rule.\n- keep = false if it is speculative (\"might\", \"could potentially\" without evidence), already handled in the shown code, a style/naming nitpick not backed by a rule, based on code that is not shown and cannot be verified, a duplicate of another candidate, or the suggested fix would be wrong.\nYou may also lower (never raise) the severity if the impact is overstated.\nWhen in doubt, reject. A wrong comment costs more than a missed one.\n\nReturn ONLY JSON, no markdown fence, no prose:\n{\"verdicts\":[{\"id\":\"C1\",\"keep\":true,\"severity\":\"high\",\"reason\":\"one short sentence\"}]}\nInclude every candidate id exactly once.\n"
+            }
+          ]
+        }
+      },
+      "id": "56fc352f-896d-47d3-80d6-59e2e4f3c1de",
+      "name": "Verify Issues",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [
+        3140,
+        120
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "notes": "Second pass over BOTH reviewers' issues: rejects false positives. On failure, VERIFY_FAIL_MODE decides what is posted."
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "qwen3-coder"
+        },
+        "options": {
+          "temperature": 0,
+          "maxTokens": 4096,
+          "timeout": 300000,
+          "maxRetries": 2
+        }
+      },
+      "id": "bf52a842-5ea7-4ee4-98d0-cbdd13172424",
+      "name": "Qwen - Verifier",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        3140,
+        340
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "REPLACE_LLM",
+          "name": "Internal Qwen (OpenAI-compatible)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// n8n Code node: \"Apply Verdicts\"   (Mode: Run Once for All Items)\n//\n// Filters candidates with the verifier's verdicts, caps, and emits:\n//   kind = 'comment' -> inline comment / task  (Post Inline Comment / Task)\n//   kind = 'notice'  -> one general PR comment when part of the review failed\n// ============================================================================\n\nconst cfg = $('Config').first().json;\nconst { candidates = [], report = {} } = $('Resolve Anchors').first().json;\n\nconst num = (v, d) => (Number.isFinite(Number(v)) && String(v).trim() !== '' ? Number(v) : d);\nconst MAX_COMMENTS = num(cfg.MAX_COMMENTS, 25);\nconst TASK_SEVERITIES = String(cfg.TASK_SEVERITIES || 'critical,high').split(',').map(s => s.trim().toLowerCase());\nconst VERIFY_FAIL_MODE = String(cfg.VERIFY_FAIL_MODE || 'keep_high');   // keep_all | keep_high | drop_all\nconst POST_FAILURE_NOTICE = String(cfg.POST_FAILURE_NOTICE ?? 'true') === 'true';\nconst SEV_RANK = { critical: 0, high: 1, medium: 2, low: 3 };\nconst SEV_ICON = { critical: '🔴', high: '🟠', medium: '🟡', low: '🔵' };\nconst SOURCE_LABEL = { general: 'code review', rules: 'repo rules review' };\n\n// ---------- read verifier output (if it ran) --------------------------------\nlet verdicts = null;      // Map id -> {keep, reason, severity}\nlet verifyError = null;\nlet verifyRan = false;\ntry { verifyRan = $('Verify Issues').isExecuted; } catch (e) { verifyRan = false; }\n\nif (verifyRan && candidates.length) {\n  const v = $input.first().json;\n  if (v.error) {\n    verifyError = String(v.error.message || v.error).slice(0, 300);\n  } else {\n    const raw = String(v.text ?? v.output ?? '').replace(/<think>[\\s\\S]*?<\\/think>/gi, '').replace(/```(?:json)?/gi, '');\n    const a = raw.indexOf('{'), b = raw.lastIndexOf('}');\n    try {\n      const parsed = JSON.parse(raw.slice(a, b + 1));\n      verdicts = new Map((parsed.verdicts || []).map(x => [String(x.id).toUpperCase(), x]));\n    } catch (e) {\n      verifyError = 'verifier output was not valid JSON';\n    }\n  }\n}\n\n// ---------- filter ----------------------------------------------------------\nreport.verification = verdicts ? 'ok' : verifyError ? `failed: ${verifyError} (mode ${VERIFY_FAIL_MODE})` : 'skipped';\nreport.rejectedByVerifier = [];\n\nconst kept = [];\nfor (const c of candidates) {\n  if (verdicts) {\n    const v = verdicts.get(c.id.toUpperCase());\n    if (v && v.keep === false) { report.rejectedByVerifier.push({ id: c.id, source: c.source, title: c.title, reason: v.reason }); continue; }\n    if (v && SEV_RANK[String(v.severity).toLowerCase()] !== undefined) c.severity = String(v.severity).toLowerCase();\n  } else if (verifyError) {\n    if (VERIFY_FAIL_MODE === 'drop_all') continue;\n    if (VERIFY_FAIL_MODE === 'keep_high' && SEV_RANK[c.severity] > 1) continue;\n  }\n  kept.push(c);\n}\n\nkept.sort((a, b) => (SEV_RANK[a.severity] ?? 9) - (SEV_RANK[b.severity] ?? 9));\nconst posted = kept.slice(0, MAX_COMMENTS);\nreport.cappedOut = Math.max(0, kept.length - MAX_COMMENTS);\nreport.posting = posted.length;\n\n// ---------- build Bitbucket payloads ----------------------------------------\nfunction text(c) {\n  const isRule = c.source === 'rules';\n  const head = `${SEV_ICON[c.severity] || '⚪'} **[${c.severity.toUpperCase()}] ${isRule ? 'Rule violation: ' : ''}${c.title}**${c.category ? `  \\`${c.category}\\`` : ''}`;\n  const parts = [head];\n  if (isRule && c.rule) parts.push(`> **Rule:** ${c.rule}`);\n  if (c.description) parts.push(c.description);\n  if (c.suggestion) parts.push(`**Suggestion:**\\n${c.suggestion}`);\n  if (!c.line && c.claimedLine) parts.push(`_Reported near line ${c.claimedLine} (outside the PR diff, could not be pinned inline)._`);\n  parts.push(isRule ? '_— AI review (repo rules)_' : '_— AI review_');\n  return parts.join('\\n\\n');\n}\n\nconst out = posted.map(c => ({\n  json: {\n    kind: 'comment',\n    source: c.source,\n    path: c.path, line: c.line, resolution: c.resolution,\n    body: {\n      text: text(c),\n      severity: TASK_SEVERITIES.includes(c.severity) ? 'BLOCKER' : 'NORMAL',   // BLOCKER = Bitbucket task\n      anchor: {\n        diffType: 'EFFECTIVE',\n        path: c.path,\n        ...(c.srcPath ? { srcPath: c.srcPath } : {}),\n        ...(c.line ? { line: c.line, lineType: c.lineType } : {}),\n        fileType: 'TO',\n      },\n    },\n    report,\n  },\n}));\n\n// ---------- failure notice ---------------------------------------------------\nconst failed = report.failedChunks || [];\nif (POST_FAILURE_NOTICE && (failed.length || verifyError)) {\n  const lines = ['⚠️ **AI review was incomplete**'];\n  if (failed.length) {\n    lines.push(`${failed.length} review part(s) failed, so these files may be missing AI comments:`);\n    for (const f of failed) lines.push(`- [${SOURCE_LABEL[f.source] || f.source}] ${f.files.map(p => `\\`${p}\\``).join(', ')}  _(${f.error})_`);\n  }\n  if (verifyError) {\n    const what = { keep_all: 'all issues were posted unverified',\n                   keep_high: 'only critical/high issues were posted, unverified',\n                   drop_all: 'no issues were posted' }[VERIFY_FAIL_MODE] || VERIFY_FAIL_MODE;\n    lines.push(`The false-positive check failed (${verifyError}); ${what}.`);\n  }\n  lines.push('_— AI review_');\n  out.push({ json: { kind: 'notice', body: { text: lines[0] + '\\n\\n' + lines.slice(1).join('\\n') }, report } });\n}\n\nreturn out;   // empty -> nothing to post, workflow ends here\n"
+      },
+      "id": "e170f320-0484-4229-abeb-12ec7f08e99e",
+      "name": "Apply Verdicts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3380,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "388aaad1-73c7-4993-a096-68afb8bbdf6e",
+              "leftValue": "={{ $json.kind }}",
+              "rightValue": "comment",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "6052378b-e52f-4bf9-83fb-d40cf2a600f8",
+      "name": "Is Inline Comment?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3600,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.BB_BASE_URL }}/rest/api/1.0/projects/{{ $('Config').first().json.PROJECT }}/repos/{{ $('Config').first().json.REPO }}/pull-requests/{{ $('Config').first().json.PR_ID }}/comments",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 300
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "32d8c981-9c77-485f-9278-8196858e5ef1",
+      "name": "Post Inline Comment / Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3840,
+        120
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "REPLACE_BB",
+          "name": "Bitbucket Basic Auth"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// n8n Code node: \"Format Diff Failure\"   (Mode: Run Once for All Items)\n// Runs on the error output of \"Get PR Diff\" (after its retries are used up).\n// ============================================================================\nconst e = $input.first().json.error || $input.first().json;\nconst msg = String(e.message || e.description || JSON.stringify(e)).slice(0, 300);\nreturn [{\n  json: {\n    kind: 'notice',\n    body: { text: `⚠️ **AI review could not run**\\n\\nFetching the PR diff failed: \\`${msg}\\`\\n\\n_— AI review_` },\n  },\n}];\n"
+      },
+      "id": "cdbbec9f-fd9b-4598-98ed-0152a43f9ea9",
+      "name": "Format Diff Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.BB_BASE_URL }}/rest/api/1.0/projects/{{ $('Config').first().json.PROJECT }}/repos/{{ $('Config').first().json.REPO }}/pull-requests/{{ $('Config').first().json.PR_ID }}/comments",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "0f6c1915-cd39-40c2-8ba2-94ecbe72676b",
+      "name": "Post Failure Notice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3840,
+        400
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "REPLACE_BB",
+          "name": "Bitbucket Basic Auth"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    }
+  ],
+  "connections": {
+    "Bitbucket PR Webhook": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Get Repo Rules",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Repo Rules": {
+      "main": [
+        [
+          {
+            "node": "Get PR Diff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get PR Diff": {
+      "main": [
+        [
+          {
+            "node": "Build Review Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Diff Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Review Context": {
+      "main": [
+        [
+          {
+            "node": "Has Reviewable Files?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Reviewable Files?": {
+      "main": [
+        [
+          {
+            "node": "AI Code Reviewer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "AI Code Reviewer": {
+      "main": [
+        [
+          {
+            "node": "Rules Review Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rules Review Input": {
+      "main": [
+        [
+          {
+            "node": "Has Repo Rules?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Repo Rules?": {
+      "main": [
+        [
+          {
+            "node": "AI Rules Reviewer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resolve Anchors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Rules Reviewer": {
+      "main": [
+        [
+          {
+            "node": "Resolve Anchors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Anchors": {
+      "main": [
+        [
+          {
+            "node": "Has Candidates?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Candidates?": {
+      "main": [
+        [
+          {
+            "node": "Verify Issues",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Apply Verdicts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Issues": {
+      "main": [
+        [
+          {
+            "node": "Apply Verdicts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Verdicts": {
+      "main": [
+        [
+          {
+            "node": "Is Inline Comment?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Inline Comment?": {
+      "main": [
+        [
+          {
+            "node": "Post Inline Comment / Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Post Failure Notice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Diff Failure": {
+      "main": [
+        [
+          {
+            "node": "Post Failure Notice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qwen - Reviewer": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Code Reviewer",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_file_content": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Code Reviewer",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "list_files": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Code Reviewer",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto-fixing Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Code Reviewer",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qwen - JSON Fixer": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Auto-fixing Output Parser",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Issues Schema": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Auto-fixing Output Parser",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qwen - Rules Reviewer": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Rules Reviewer",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "rules_get_file_content": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Rules Reviewer",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "rules_list_files": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Rules Reviewer",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rules Auto-fixing Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Rules Reviewer",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qwen - Rules JSON Fixer": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Rules Auto-fixing Output Parser",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rules Issues Schema": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Rules Auto-fixing Output Parser",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qwen - Verifier": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Verify Issues",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
