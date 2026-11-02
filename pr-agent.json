@@ -272,14 +272,14 @@
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================================\n// n8n Code node: \"Build Review Context\"   (Mode: Run Once for All Items)\n//\n// Parses the Bitbucket Data Center PR diff JSON and splits it into CHUNKS.\n// Output = one item per chunk; each AI agent runs once per item.\n//\n// Each item carries:\n//   - files[]       : canonical files of this chunk with GLOBAL ids (F1..Fn)\n//                     -> the ONLY source of truth for file paths\n//   - lineIndex     : { path: { \"<newLine>\": {lineType, text} } } for this chunk\n//                     -> every line Bitbucket will accept an inline comment on\n//   - annotatedDiff : this chunk's diff with explicit new-file line numbers\n//   - repoRules     : GLOBAL_RULES + repo rules file (from the PR SOURCE branch)\n//   - hasRules      : false when there are no rules -> the rules reviewer is skipped\n// ============================================================================\n\nconst cfg = $('Config').first().json;\nconst diff = $input.first().json;\n\nconst num = (v, d) => (Number.isFinite(Number(v)) && String(v).trim() !== '' ? Number(v) : d);\nconst IGNORE = String(cfg.IGNORE_PATH_REGEX || '')\n  .split(',').map(s => s.trim()).filter(Boolean).map(s => new RegExp(s));\nconst CHUNK_MAX_FILES = num(cfg.CHUNK_MAX_FILES, 5);\nconst CHUNK_MAX_CHARS = num(cfg.CHUNK_MAX_CHARS, 40000);\nconst MAX_FILE_CHARS = num(cfg.MAX_FILE_CHARS, 60000);\nconst MAX_CHUNKS = num(cfg.MAX_CHUNKS, 10);\nconst MAX_RULES_CHARS = num(cfg.MAX_RULES_CHARS, 8000);\n\n// ---------- repo rules (fetched by \"Get Repo Rules\", 404 = no rules) --------\nlet repoRules = '';\ntry {\n  const r = $('Get Repo Rules').first().json;\n  const status = Number(r.statusCode ?? 200);\n  const content = r.data ?? r.body;   // text response -> \"data\"; keep \"body\" as fallback\n  if (status === 200 && typeof content === 'string') repoRules = content.trim();\n} catch (e) { /* node failed or not executed -> no repo rules */ }\nconst globalRules = String(cfg.GLOBAL_RULES || '').trim();\nlet rules = [globalRules && `General rules:\\n${globalRules}`, repoRules && `Repository rules (${cfg.REPO_RULES_PATH}):\\n${repoRules}`]\n  .filter(Boolean).join('\\n\\n');\nif (rules.length > MAX_RULES_CHARS) rules = rules.slice(0, MAX_RULES_CHARS) + '\\n... (rules truncated)';\n\n// ---------- parse diff into per-file blocks ---------------------------------\nconst pathOf = ref => (ref && (ref.toString || (ref.components || []).join('/'))) || null;\nconst parsed = [];\nconst skipped = [];\n\nconst diffs = [...(diff.diffs || [])].sort((a, b) =>\n  String(pathOf(a.destination) || pathOf(a.source)).localeCompare(String(pathOf(b.destination) || pathOf(b.source))));\n\nfor (const d of diffs) {\n  const newPath = pathOf(d.destination);\n  const oldPath = pathOf(d.source);\n  const path = newPath || oldPath;\n  if (!path) continue;\n  const changeType = !oldPath ? 'ADD' : !newPath ? 'DELETE' : oldPath !== newPath ? 'RENAME' : 'MODIFY';\n\n  if (IGNORE.some(rx => rx.test(path))) { skipped.push({ path, reason: 'ignored by pattern' }); continue; }\n  if (d.binary) { skipped.push({ path, reason: 'binary' }); continue; }\n  if (changeType === 'DELETE') { skipped.push({ path, reason: 'deleted file' }); continue; }\n\n  const idx = {};\n  let body = '';\n  for (const h of d.hunks || []) {\n    body += `@@ -${h.sourceLine},${h.sourceSpan} +${h.destinationLine},${h.destinationSpan} @@\\n`;\n    for (const seg of h.segments || []) {\n      for (const l of seg.lines || []) {\n        const text = l.line ?? '';\n        if (seg.type === 'REMOVED') {\n          body += `-       | ${text}\\n`;\n        } else {\n          idx[String(l.destination)] = { lineType: seg.type, text };\n          body += `${seg.type === 'ADDED' ? '+' : ' '}${String(l.destination).padStart(6)} | ${text}\\n`;\n        }\n      }\n    }\n  }\n  if (d.truncated) body += '... (diff truncated by Bitbucket; fetch the full file if needed)\\n';\n  if (!body) { skipped.push({ path, reason: 'no textual changes' }); continue; }\n  if (body.length > MAX_FILE_CHARS) { skipped.push({ path, reason: `diff too large (${body.length} chars)` }); continue; }\n\n  parsed.push({ path, srcPath: changeType === 'RENAME' ? oldPath : null, changeType, oldPath, body, idx });\n}\n\n// ---------- global file ids, then chunk (files sorted by path keep modules together)\nparsed.forEach((p, i) => { p.fid = `F${i + 1}`; });\n\nconst chunks = [];\nlet cur = null;\nfor (const p of parsed) {\n  const header = `\\n### ${p.fid}  ${p.path}  (${p.changeType}${p.changeType === 'RENAME' ? ` from ${p.oldPath}` : ''})\\n`;\n  const block = header + p.body;\n  if (!cur || cur.files.length >= CHUNK_MAX_FILES || (cur.chars + block.length > CHUNK_MAX_CHARS && cur.files.length > 0)) {\n    cur = { files: [], chars: 0, text: '', lineIndex: {} };\n    chunks.push(cur);\n  }\n  cur.files.push({ fid: p.fid, path: p.path, srcPath: p.srcPath, changeType: p.changeType });\n  cur.lineIndex[p.path] = p.idx;\n  cur.text += block;\n  cur.chars += block.length;\n}\n\nif (chunks.length > MAX_CHUNKS) {\n  for (const c of chunks.splice(MAX_CHUNKS)) for (const f of c.files) skipped.push({ path: f.path, reason: 'PR too large (MAX_CHUNKS reached)' });\n}\n\nif (!chunks.length) return [{ json: { hasFiles: false, hasRules: false, skipped } }];\n\nconst allPaths = chunks.flatMap(c => c.files.map(f => `${f.fid} = ${f.path}`));\nconst skippedList = skipped.map(s => `- ${s.path} (${s.reason})`).join('\\n') || '(none)';\n\nreturn chunks.map((c, i) => ({\n  json: {\n    hasFiles: true,\n    hasRules: rules.length > 0,\n    chunkIndex: i + 1,\n    chunkCount: chunks.length,\n    files: c.files,\n    lineIndex: c.lineIndex,\n    skipped,\n    annotatedDiff: c.text,\n    fileList: c.files.map(f => `${f.fid} = ${f.path}`).join('\\n'),\n    otherFiles: allPaths.filter(p => !c.files.some(f => p.startsWith(f.fid + ' '))).join('\\n') || '(none)',\n    skippedList,\n    repoRules: rules,\n  },\n}));\n"
+        "jsCode": "// ============================================================================\n// n8n Code node: \"Build Review Context\"   (Mode: Run Once for All Items)\n//\n// Parses the Bitbucket Data Center PR diff JSON and splits it into CHUNKS.\n// Output = one item per chunk; each AI agent runs once per item.\n//\n// Each item carries:\n//   - files[]       : canonical files of this chunk with GLOBAL ids (F1..Fn)\n//                     -> the ONLY source of truth for file paths\n//   - lineIndex     : { path: { \"<newLine>\": {lineType, text} } } for this chunk\n//                     -> every line Bitbucket will accept an inline comment on\n//   - annotatedDiff : this chunk's changed files IN FULL (from \"Get Changed File\"),\n//                     every line numbered, + = added, - = removed (inline at its\n//                     position). Falls back to the plain diff hunks when the file\n//                     could not be fetched or exceeds MAX_FILE_CHARS.\n//   - repoRules     : GLOBAL_RULES + repo rules file (from the PR SOURCE branch)\n//   - hasRules      : false when there are no rules -> the rules reviewer is skipped\n// ============================================================================\n\nconst cfg = $('Config').first().json;\nconst diff = $('Get PR Diff').first().json;\n\n// full file contents, paired by index with \"List Changed Files\"\nconst listed = $('List Changed Files').all();\nconst fullContent = {};\n$input.all().forEach((it, i) => {\n  const r = it.json || {};\n  const content = r.data ?? r.body;\n  if (Number(r.statusCode ?? 200) === 200 && typeof content === 'string' && listed[i]) fullContent[listed[i].json.path] = content;\n});\n\nconst num = (v, d) => (Number.isFinite(Number(v)) && String(v).trim() !== '' ? Number(v) : d);\nconst IGNORE = String(cfg.IGNORE_PATH_REGEX || '')\n  .split(',').map(s => s.trim()).filter(Boolean).map(s => new RegExp(s));\nconst CHUNK_MAX_FILES = num(cfg.CHUNK_MAX_FILES, 5);\nconst CHUNK_MAX_CHARS = num(cfg.CHUNK_MAX_CHARS, 40000);\nconst MAX_FILE_CHARS = num(cfg.MAX_FILE_CHARS, 60000);\nconst MAX_CHUNKS = num(cfg.MAX_CHUNKS, 10);\nconst MAX_RULES_CHARS = num(cfg.MAX_RULES_CHARS, 8000);\n\n// ---------- repo rules (fetched by \"Get Repo Rules\", 404 = no rules) --------\nlet repoRules = '';\ntry {\n  const r = $('Get Repo Rules').first().json;\n  const status = Number(r.statusCode ?? 200);\n  const content = r.data ?? r.body;   // text response -> \"data\"; keep \"body\" as fallback\n  if (status === 200 && typeof content === 'string') repoRules = content.trim();\n} catch (e) { /* node failed or not executed -> no repo rules */ }\nconst globalRules = String(cfg.GLOBAL_RULES || '').trim();\nlet rules = [globalRules && `General rules:\\n${globalRules}`, repoRules && `Repository rules (${cfg.REPO_RULES_PATH}):\\n${repoRules}`]\n  .filter(Boolean).join('\\n\\n');\nif (rules.length > MAX_RULES_CHARS) rules = rules.slice(0, MAX_RULES_CHARS) + '\\n... (rules truncated)';\n\n// ---------- parse diff into per-file blocks ---------------------------------\nconst pathOf = ref => (ref && (ref.toString || (ref.components || []).join('/'))) || null;\nconst parsed = [];\nconst skipped = [];\n\nconst diffs = [...(diff.diffs || [])].sort((a, b) =>\n  String(pathOf(a.destination) || pathOf(a.source)).localeCompare(String(pathOf(b.destination) || pathOf(b.source))));\n\nfor (const d of diffs) {\n  const newPath = pathOf(d.destination);\n  const oldPath = pathOf(d.source);\n  const path = newPath || oldPath;\n  if (!path) continue;\n  const changeType = !oldPath ? 'ADD' : !newPath ? 'DELETE' : oldPath !== newPath ? 'RENAME' : 'MODIFY';\n\n  if (IGNORE.some(rx => rx.test(path))) { skipped.push({ path, reason: 'ignored by pattern' }); continue; }\n  if (d.binary) { skipped.push({ path, reason: 'binary' }); continue; }\n  if (changeType === 'DELETE') { skipped.push({ path, reason: 'deleted file' }); continue; }\n\n  const idx = {};               // commentable lines (diff hunks only) -> anchors\n  const added = new Set();\n  const removedBefore = {};     // new-file line number -> removed lines shown just before it\n  let body = '';\n  for (const h of d.hunks || []) {\n    body += `@@ -${h.sourceLine},${h.sourceSpan} +${h.destinationLine},${h.destinationSpan} @@\\n`;\n    let next = h.destinationLine;\n    for (const seg of h.segments || []) {\n      for (const l of seg.lines || []) {\n        const text = l.line ?? '';\n        if (seg.type === 'REMOVED') {\n          (removedBefore[next] ||= []).push(text);\n          body += `-       | ${text}\\n`;\n        } else {\n          idx[String(l.destination)] = { lineType: seg.type, text };\n          if (seg.type === 'ADDED') added.add(l.destination);\n          next = l.destination + 1;\n          body += `${seg.type === 'ADDED' ? '+' : ' '}${String(l.destination).padStart(6)} | ${text}\\n`;\n        }\n      }\n    }\n  }\n  if (!body) { skipped.push({ path, reason: 'no textual changes' }); continue; }\n\n  // whole file with the changes marked in place\n  let mode = 'full file';\n  const content = fullContent[path];\n  if (content !== undefined) {\n    const lines = content.replace(/\\r\\n?/g, '\\n').replace(/\\n$/, '').split('\\n');\n    let full = '';\n    lines.forEach((text, i) => {\n      const n = i + 1;\n      for (const r of removedBefore[n] || []) full += `-       | ${r}\\n`;\n      full += `${added.has(n) ? '+' : ' '}${String(n).padStart(6)} | ${text}\\n`;\n    });\n    for (const r of removedBefore[lines.length + 1] || []) full += `-       | ${r}\\n`;\n    if (full.length <= MAX_FILE_CHARS) body = full;\n    else mode = `diff only, file too large (${full.length} chars)`;\n  } else {\n    mode = 'diff only, full file could not be fetched';\n  }\n  if (mode !== 'full file' && d.truncated) body += '... (diff truncated by Bitbucket)\\n';\n  if (body.length > MAX_FILE_CHARS) { skipped.push({ path, reason: `diff too large (${body.length} chars)` }); continue; }\n\n  parsed.push({ path, srcPath: changeType === 'RENAME' ? oldPath : null, changeType, oldPath, body, idx, mode });\n}\n\n// ---------- global file ids, then chunk (files sorted by path keep modules together)\nparsed.forEach((p, i) => { p.fid = `F${i + 1}`; });\n\nconst chunks = [];\nlet cur = null;\nfor (const p of parsed) {\n  const header = `\\n### ${p.fid}  ${p.path}  (${p.changeType}${p.changeType === 'RENAME' ? ` from ${p.oldPath}` : ''}, ${p.mode})\\n`;\n  const block = header + p.body;\n  if (!cur || cur.files.length >= CHUNK_MAX_FILES || (cur.chars + block.length > CHUNK_MAX_CHARS && cur.files.length > 0)) {\n    cur = { files: [], chars: 0, text: '', lineIndex: {} };\n    chunks.push(cur);\n  }\n  cur.files.push({ fid: p.fid, path: p.path, srcPath: p.srcPath, changeType: p.changeType });\n  cur.lineIndex[p.path] = p.idx;\n  cur.text += block;\n  cur.chars += block.length;\n}\n\nif (chunks.length > MAX_CHUNKS) {\n  for (const c of chunks.splice(MAX_CHUNKS)) for (const f of c.files) skipped.push({ path: f.path, reason: 'PR too large (MAX_CHUNKS reached)' });\n}\n\nif (!chunks.length) return [{ json: { hasFiles: false, hasRules: false, skipped } }];\n\nconst allPaths = chunks.flatMap(c => c.files.map(f => `${f.fid} = ${f.path}`));\nconst skippedList = skipped.map(s => `- ${s.path} (${s.reason})`).join('\\n') || '(none)';\n\nreturn chunks.map((c, i) => ({\n  json: {\n    hasFiles: true,\n    hasRules: rules.length > 0,\n    chunkIndex: i + 1,\n    chunkCount: chunks.length,\n    files: c.files,\n    lineIndex: c.lineIndex,\n    skipped,\n    annotatedDiff: c.text,\n    fileList: c.files.map(f => `${f.fid} = ${f.path}`).join('\\n'),\n    otherFiles: allPaths.filter(p => !c.files.some(f => p.startsWith(f.fid + ' '))).join('\\n') || '(none)',\n    skippedList,\n    repoRules: rules,\n  },\n}));\n"
       },
       "id": "2cea565a-cb5f-4702-ba38-bc3e20fa72b9",
       "name": "Build Review Context",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        880,
+        1320,
         220
       ]
     },
@@ -313,26 +313,29 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        1100,
+        1540,
         220
       ]
     },
     {
       "parameters": {
         "promptType": "define",
+        "text": "=PR: {{ $('Config').first().json.PR_TITLE }}\nPart {{ $json.chunkIndex }} of {{ $json.chunkCount }}\n\nDescription:\n{{ $('Config').first().json.PR_DESCRIPTION }}\n\nFILE LIST (review these):\n{{ $json.fileList }}\n\nOTHER FILES in this PR (reviewed in other parts - do not report on them):\n{{ $json.otherFiles }}\n\nFiles excluded from the review:\n{{ $json.skippedList }}\n\nCHANGED FILES (full content, changes marked):\n{{ $json.annotatedDiff }}\n\nReview this part and return the JSON object described in your instructions.",
         "hasOutputParser": true,
-        "text": "=PR: {{ $('Config').first().json.PR_TITLE }}\nPart {{ $json.chunkIndex }} of {{ $json.chunkCount }}\n\nDescription:\n{{ $('Config').first().json.PR_DESCRIPTION }}\n\nFILE LIST (review these):\n{{ $json.fileList }}\n\nOTHER FILES in this PR (reviewed in other parts - context only, do not report on them):\n{{ $json.otherFiles }}\n\nFiles excluded from the review:\n{{ $json.skippedList }}\n\nANNOTATED DIFF:\n{{ $json.annotatedDiff }}\n\nReview this part and return the JSON object described in your instructions.",
-        "options": {
-          "systemMessage": "You are a senior code reviewer for a Java / Spring Boot microservices codebase. You review ONE part of a pull request (large PRs are split into parts reviewed separately) and report concrete, actionable problems.\n\n## What you receive\n- PR title and description\n- OTHER FILES in the PR that are reviewed in other parts. You may fetch them for context but do not report issues in them.\n- A FILE LIST mapping file IDs to paths, e.g. `F3 = services/order-service/src/main/java/.../OrderService.java`\n- An ANNOTATED DIFF. Every line that exists in the new version is prefixed with its line number:\n    `+   121 | code`   -> line 121, ADDED in this PR\n    `    120 | code`   -> line 120, unchanged context\n    `-       | code`   -> REMOVED line (no new line number, you cannot comment on it)\n\n## Tools\n- get_file_content(path): full content of a file at the PR source commit. Use it when you need surrounding code (class fields, other methods, imports) to judge a change.\n- list_files(directory): list files under a directory, to find related classes, configs, tests.\nUse tools only when they change your verdict. Do not fetch every file.\n\n## What to report\nBugs, security issues (injection, secrets, authz), concurrency / transaction problems, resource leaks, broken error handling, null-safety, performance traps (N+1, unbounded queries), API/contract breaks, violations of the project's existing patterns and conventions.\nDo NOT report: formatting, naming nitpicks, missing comments, things a linter catches, praise, or a PR summary. Compliance with written team rules is checked by a separate reviewer; do not try to guess those rules.\n\n## LOCATION RULES (critical - comments are posted inline by a program)\n1. `file_id` MUST be one of the IDs from the FILE LIST.\n2. `line` MUST be a line number printed in the ANNOTATED DIFF for that file, preferably a `+` line. Never a number you computed from get_file_content output.\n3. `code_snippet` MUST be copied verbatim from that single diff line (the text after `| `), at least 10 characters. It is used to verify and correct the location.\n4. If the problem lives in code outside the diff, attach it to the changed line that causes or exposes it.\n5. One issue = one line. If the same problem repeats, report the first occurrence and mention the others in the description.\n\n## Output\nReturn ONLY a JSON object, no markdown fence, no prose before or after:\n{\"issues\":[{\"file_id\":\"F1\",\"line\":121,\"code_snippet\":\"exact text of line 121\",\"severity\":\"critical|high|medium|low\",\"category\":\"bug|security|performance|concurrency|architecture|error-handling|maintainability\",\"title\":\"short title (max 80 chars)\",\"description\":\"what is wrong and why it matters\",\"suggestion\":\"concrete fix, may include a short code sample\",\"confidence\":0.9}]}\n`confidence` (0.0-1.0) = how sure you are that this is a real problem given the code you actually saw. Below 0.5 means you are guessing - leave it out instead.\nIf there is nothing worth reporting return {\"issues\":[]}.\n",
-          "maxIterations": 15
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are a senior code reviewer for a Java / Spring Boot microservices codebase. You review ONE part of a pull request (large PRs are split into parts reviewed separately) and report concrete, actionable problems.\n\n## What you receive\n- PR title and description\n- OTHER FILES in the PR that are reviewed in other parts (names only). Do not report issues in them.\n- A FILE LIST mapping file IDs to paths, e.g. `F3 = services/order-service/src/main/java/.../OrderService.java`\n- CHANGED FILES: every file of this part IN FULL (its new version), with this PR's changes marked in place. Every line that exists in the new version is prefixed with its line number:\n    `+   121 | code`   -> line 121, ADDED in this PR\n    `    120 | code`   -> line 120, unchanged\n    `-       | code`   -> REMOVED line (no new line number, you cannot comment on it)\n  A file header marked `diff only` means the full file was not available; only the changed hunks are shown.\n\n## What to report\nBugs, security issues (injection, secrets, authz), concurrency / transaction problems, resource leaks, broken error handling, null-safety, performance traps (N+1, unbounded queries), API/contract breaks, violations of the project's existing patterns and conventions.\nDo NOT report: formatting, naming nitpicks, missing comments, things a linter catches, praise, or a PR summary. Compliance with written team rules is checked by a separate reviewer; do not try to guess those rules.\n\n## LOCATION RULES (critical - comments are posted inline by a program)\n1. `file_id` MUST be one of the IDs from the FILE LIST.\n2. `line` MUST be a `+` line (ADDED in this PR) of that file in CHANGED FILES. Unchanged lines may only be used when they are within a few lines of a `+` line.\n3. `code_snippet` MUST be copied verbatim from that single line (the text after `| `), at least 10 characters. It is used to verify and correct the location.\n4. You see the whole file, but review only what this PR changes. If the problem lives in unchanged code, report it only when this PR's change causes or exposes it, and attach it to that changed line.\n5. One issue = one line. If the same problem repeats, report the first occurrence and mention the others in the description.\n\n## Output\nReturn ONLY a JSON object, no markdown fence, no prose before or after:\n{\"issues\":[{\"file_id\":\"F1\",\"line\":121,\"code_snippet\":\"exact text of line 121\",\"severity\":\"critical|high|medium|low\",\"category\":\"bug|security|performance|concurrency|architecture|error-handling|maintainability\",\"title\":\"short title (max 80 chars)\",\"description\":\"what is wrong and why it matters\",\"suggestion\":\"concrete fix, may include a short code sample\",\"confidence\":0.9}]}\n`confidence` (0.0-1.0) = how sure you are that this is a real problem given the code you actually saw. Below 0.5 means you are guessing - leave it out instead.\nIf there is nothing worth reporting return {\"issues\":[]}.\n"
+            }
+          ]
         }
       },
       "id": "25ccaa1f-24a5-4eb2-a5d9-71013895b7fe",
       "name": "AI Code Reviewer",
-      "type": "@n8n/n8n-nodes-langchain.agent",
-      "typeVersion": 1.7,
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
       "position": [
-        1340,
+        1780,
         220
       ],
       "onError": "continueRegularOutput",
@@ -360,63 +363,13 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.2,
       "position": [
-        1140,
+        1580,
         480
       ],
       "credentials": {
         "openAiApi": {
           "id": "REPLACE_LLM",
           "name": "Internal Qwen (OpenAI-compatible)"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "toolDescription": "Returns the full raw content of one repository file at the PR source commit. Input: the full repository path exactly as written in the FILE LIST (e.g. services/order-service/src/main/java/com/acme/OrderService.java).",
-        "url": "={{ $('Config').first().json.BB_BASE_URL }}/rest/api/1.0/projects/{{ $('Config').first().json.PROJECT }}/repos/{{ $('Config').first().json.REPO }}/raw/{{ $fromAI('path', 'Full repository path of the file, no leading slash', 'string') }}?at={{ $('Config').first().json.FROM_HASH }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpBasicAuth",
-        "options": {
-          "timeout": 30000
-        }
-      },
-      "id": "151f3761-4e8b-488e-9637-e6dd8dcf125e",
-      "name": "get_file_content",
-      "type": "n8n-nodes-base.httpRequestTool",
-      "typeVersion": 4.2,
-      "position": [
-        1300,
-        480
-      ],
-      "credentials": {
-        "httpBasicAuth": {
-          "id": "REPLACE_BB",
-          "name": "Bitbucket Basic Auth"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "toolDescription": "Lists all file paths under a repository directory at the PR source commit (recursive). Input: directory path without leading or trailing slash, e.g. services/order-service/src/main/java/com/acme/order",
-        "url": "={{ $('Config').first().json.BB_BASE_URL }}/rest/api/1.0/projects/{{ $('Config').first().json.PROJECT }}/repos/{{ $('Config').first().json.REPO }}/files/{{ $fromAI('directory', 'Repository directory path, no leading/trailing slash', 'string') }}?at={{ $('Config').first().json.FROM_HASH }}&limit=1000",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpBasicAuth",
-        "options": {
-          "timeout": 30000
-        }
-      },
-      "id": "61bf9bd0-e912-4f40-8b8f-a220f0b3bf43",
-      "name": "list_files",
-      "type": "n8n-nodes-base.httpRequestTool",
-      "typeVersion": 4.2,
-      "position": [
-        1440,
-        480
-      ],
-      "credentials": {
-        "httpBasicAuth": {
-          "id": "REPLACE_BB",
-          "name": "Bitbucket Basic Auth"
         }
       }
     },
@@ -429,7 +382,7 @@
       "type": "@n8n/n8n-nodes-langchain.outputParserAutofixing",
       "typeVersion": 1,
       "position": [
-        1600,
+        2040,
         480
       ],
       "notes": "If the reviewer returns malformed JSON, asks the model once to repair it."
@@ -453,7 +406,7 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.2,
       "position": [
-        1540,
+        1980,
         700
       ],
       "credentials": {
@@ -473,7 +426,7 @@
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.2,
       "position": [
-        1720,
+        2160,
         700
       ]
     },
@@ -486,7 +439,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1860,
+        2300,
         220
       ]
     },
@@ -520,26 +473,29 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        2080,
+        2520,
         220
       ]
     },
     {
       "parameters": {
         "promptType": "define",
+        "text": "=PR: {{ $('Config').first().json.PR_TITLE }}\nPart {{ $json.chunkIndex }} of {{ $json.chunkCount }}\n\nDescription:\n{{ $('Config').first().json.PR_DESCRIPTION }}\n\nREVIEW RULES:\n{{ $json.repoRules }}\n\nFILE LIST (check these):\n{{ $json.fileList }}\n\nOTHER FILES in this PR (checked in other parts - do not report on them):\n{{ $json.otherFiles }}\n\nCHANGED FILES (full content, changes marked):\n{{ $json.annotatedDiff }}\n\nCheck this part against the REVIEW RULES and return the JSON object described in your instructions.",
         "hasOutputParser": true,
-        "text": "=PR: {{ $('Config').first().json.PR_TITLE }}\nPart {{ $json.chunkIndex }} of {{ $json.chunkCount }}\n\nDescription:\n{{ $('Config').first().json.PR_DESCRIPTION }}\n\nREVIEW RULES:\n{{ $json.repoRules }}\n\nFILE LIST (check these):\n{{ $json.fileList }}\n\nOTHER FILES in this PR (checked in other parts - context only, do not report on them):\n{{ $json.otherFiles }}\n\nANNOTATED DIFF:\n{{ $json.annotatedDiff }}\n\nCheck this part against the REVIEW RULES and return the JSON object described in your instructions.",
-        "options": {
-          "systemMessage": "You are a rules-compliance reviewer for a Java / Spring Boot microservices codebase. Your ONLY job is to check ONE part of a pull request (large PRs are split into parts reviewed separately) against the team's written REVIEW RULES.\n\n## What you receive\n- PR title and description\n- REVIEW RULES: the team / repository rules. They are your ONLY review criteria.\n- OTHER FILES in the PR that are checked in other parts. You may fetch them for context but do not report issues in them.\n- A FILE LIST mapping file IDs to paths, e.g. `F3 = services/order-service/src/main/java/.../OrderService.java`\n- An ANNOTATED DIFF. Every line that exists in the new version is prefixed with its line number:\n    `+   121 | code`   -> line 121, ADDED in this PR\n    `    120 | code`   -> line 120, unchanged context\n    `-       | code`   -> REMOVED line (no new line number, you cannot comment on it)\n\n## Tools\n- rules_get_file_content(path): full content of a file at the PR source commit.\n- rules_list_files(directory): list files under a directory.\nUse them only when a rule cannot be judged from the diff alone (e.g. a rule about class-level annotations, a required test class, a required config entry). Do not fetch every file.\n\n## How to review\n1. Read the REVIEW RULES and decide which ones apply to the files in this part (by language, layer, path).\n2. Check every added or changed line against the applicable rules.\n3. Report each concrete violation in code added or changed by this PR.\n\n## What NOT to report\n- Bugs, security, performance or style problems that no rule mentions - another reviewer covers those.\n- Violations on unchanged context lines, unless this PR's change makes them worse.\n- Rules that do not apply to the file (wrong language, layer or module).\n- Guesses: if you cannot see code that breaks the rule, do not report it.\n\n## Severity\nUse the severity the rule itself states, if any. Otherwise: high if the rule is marked mandatory / must / blocking, medium for everything else, low for rules phrased as recommendations (\"prefer\", \"should consider\").\n\n## LOCATION RULES (critical - comments are posted inline by a program)\n1. `file_id` MUST be one of the IDs from the FILE LIST.\n2. `line` MUST be a line number printed in the ANNOTATED DIFF for that file, preferably a `+` line. Never a number you computed from rules_get_file_content output.\n3. `code_snippet` MUST be copied verbatim from that single diff line (the text after `| `), at least 10 characters. It is used to verify and correct the location.\n4. If the problem lives in code outside the diff, attach it to the changed line that causes or exposes it.\n5. One issue = one line. If the same problem repeats, report the first occurrence and mention the others in the description.\n\n## Output\nReturn ONLY a JSON object, no markdown fence, no prose before or after:\n{\"issues\":[{\"file_id\":\"F1\",\"line\":121,\"code_snippet\":\"exact text of line 121\",\"rule\":\"the broken rule, quoted from REVIEW RULES (max 300 chars)\",\"severity\":\"critical|high|medium|low\",\"category\":\"repo-rule\",\"title\":\"short title (max 80 chars)\",\"description\":\"how this code breaks the rule\",\"suggestion\":\"compliant version, may include a short code sample\",\"confidence\":0.9}]}\n`rule` is mandatory: an issue you cannot tie to a specific written rule is not a rule violation - leave it out.\n`confidence` (0.0-1.0) = how sure you are that the shown code really breaks the rule. Below 0.5 means you are guessing - leave it out instead.\nIf the code follows all applicable rules return {\"issues\":[]}.\n",
-          "maxIterations": 10
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are a rules-compliance reviewer for a Java / Spring Boot microservices codebase. Your ONLY job is to check ONE part of a pull request (large PRs are split into parts reviewed separately) against the team's written REVIEW RULES.\n\n## What you receive\n- PR title and description\n- REVIEW RULES: the team / repository rules. They are your ONLY review criteria.\n- OTHER FILES in the PR that are checked in other parts (names only). Do not report issues in them.\n- A FILE LIST mapping file IDs to paths, e.g. `F3 = services/order-service/src/main/java/.../OrderService.java`\n- CHANGED FILES: every file of this part IN FULL (its new version), with this PR's changes marked in place. Every line that exists in the new version is prefixed with its line number:\n    `+   121 | code`   -> line 121, ADDED in this PR\n    `    120 | code`   -> line 120, unchanged\n    `-       | code`   -> REMOVED line (no new line number, you cannot comment on it)\n  A file header marked `diff only` means the full file was not available; only the changed hunks are shown.\n\n## How to review\n1. Read the REVIEW RULES and decide which ones apply to the files in this part (by language, layer, path).\n2. Check every added or changed line against the applicable rules.\n3. Report each concrete violation in code added or changed by this PR.\n\n## What NOT to report\n- Bugs, security, performance or style problems that no rule mentions - another reviewer covers those.\n- Violations on unchanged context lines, unless this PR's change makes them worse.\n- Rules that do not apply to the file (wrong language, layer or module).\n- Guesses: if you cannot see code that breaks the rule, do not report it.\n\n## Severity\nUse the severity the rule itself states, if any. Otherwise: high if the rule is marked mandatory / must / blocking, medium for everything else, low for rules phrased as recommendations (\"prefer\", \"should consider\").\n\n## LOCATION RULES (critical - comments are posted inline by a program)\n1. `file_id` MUST be one of the IDs from the FILE LIST.\n2. `line` MUST be a `+` line (ADDED in this PR) of that file in CHANGED FILES. Unchanged lines may only be used when they are within a few lines of a `+` line.\n3. `code_snippet` MUST be copied verbatim from that single line (the text after `| `), at least 10 characters. It is used to verify and correct the location.\n4. You see the whole file, but review only what this PR changes. If the problem lives in unchanged code, report it only when this PR's change causes or exposes it, and attach it to that changed line.\n5. One issue = one line. If the same problem repeats, report the first occurrence and mention the others in the description.\n\n## Output\nReturn ONLY a JSON object, no markdown fence, no prose before or after:\n{\"issues\":[{\"file_id\":\"F1\",\"line\":121,\"code_snippet\":\"exact text of line 121\",\"rule\":\"the broken rule, quoted from REVIEW RULES (max 300 chars)\",\"severity\":\"critical|high|medium|low\",\"category\":\"repo-rule\",\"title\":\"short title (max 80 chars)\",\"description\":\"how this code breaks the rule\",\"suggestion\":\"compliant version, may include a short code sample\",\"confidence\":0.9}]}\n`rule` is mandatory: an issue you cannot tie to a specific written rule is not a rule violation - leave it out.\n`confidence` (0.0-1.0) = how sure you are that the shown code really breaks the rule. Below 0.5 means you are guessing - leave it out instead.\nIf the code follows all applicable rules return {\"issues\":[]}.\n"
+            }
+          ]
         }
       },
       "id": "ad23f1be-0a9b-4149-9df8-dcbbcd45f9f8",
       "name": "AI Rules Reviewer",
-      "type": "@n8n/n8n-nodes-langchain.agent",
-      "typeVersion": 1.7,
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
       "position": [
-        2320,
+        2760,
         640
       ],
       "onError": "continueRegularOutput",
@@ -567,63 +523,13 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.2,
       "position": [
-        2120,
+        2560,
         900
       ],
       "credentials": {
         "openAiApi": {
           "id": "REPLACE_LLM",
           "name": "Internal Qwen (OpenAI-compatible)"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "toolDescription": "Returns the full raw content of one repository file at the PR source commit. Input: the full repository path exactly as written in the FILE LIST (e.g. services/order-service/src/main/java/com/acme/OrderService.java).",
-        "url": "={{ $('Config').first().json.BB_BASE_URL }}/rest/api/1.0/projects/{{ $('Config').first().json.PROJECT }}/repos/{{ $('Config').first().json.REPO }}/raw/{{ $fromAI('path', 'Full repository path of the file, no leading slash', 'string') }}?at={{ $('Config').first().json.FROM_HASH }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpBasicAuth",
-        "options": {
-          "timeout": 30000
-        }
-      },
-      "id": "89cae502-2ebc-45e2-8c94-fd4bf6efa147",
-      "name": "rules_get_file_content",
-      "type": "n8n-nodes-base.httpRequestTool",
-      "typeVersion": 4.2,
-      "position": [
-        2280,
-        900
-      ],
-      "credentials": {
-        "httpBasicAuth": {
-          "id": "REPLACE_BB",
-          "name": "Bitbucket Basic Auth"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "toolDescription": "Lists all file paths under a repository directory at the PR source commit (recursive). Input: directory path without leading or trailing slash, e.g. services/order-service/src/main/java/com/acme/order",
-        "url": "={{ $('Config').first().json.BB_BASE_URL }}/rest/api/1.0/projects/{{ $('Config').first().json.PROJECT }}/repos/{{ $('Config').first().json.REPO }}/files/{{ $fromAI('directory', 'Repository directory path, no leading/trailing slash', 'string') }}?at={{ $('Config').first().json.FROM_HASH }}&limit=1000",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpBasicAuth",
-        "options": {
-          "timeout": 30000
-        }
-      },
-      "id": "ca427642-1eaf-46fb-a520-3cbf7ae4cca6",
-      "name": "rules_list_files",
-      "type": "n8n-nodes-base.httpRequestTool",
-      "typeVersion": 4.2,
-      "position": [
-        2420,
-        900
-      ],
-      "credentials": {
-        "httpBasicAuth": {
-          "id": "REPLACE_BB",
-          "name": "Bitbucket Basic Auth"
         }
       }
     },
@@ -636,7 +542,7 @@
       "type": "@n8n/n8n-nodes-langchain.outputParserAutofixing",
       "typeVersion": 1,
       "position": [
-        2580,
+        3020,
         900
       ],
       "notes": "If the reviewer returns malformed JSON, asks the model once to repair it."
@@ -660,7 +566,7 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.2,
       "position": [
-        2520,
+        2960,
         1120
       ],
       "credentials": {
@@ -680,20 +586,20 @@
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.2,
       "position": [
-        2700,
+        3140,
         1120
       ]
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================================\n// n8n Code node: \"Resolve Anchors\"   (Mode: Run Once for All Items)\n//\n// Collects the results of BOTH reviewers and outputs ONE item with all candidates.\n//   AI Code Reviewer  -> source 'general'\n//   AI Rules Reviewer -> source 'rules'   (only when repo rules exist)\n// The LLM's location is treated as a HINT only:\n//   * path -> always taken from the parsed diff (file_id lookup, or the LLM's\n//             path matched against real diff paths). Never the raw LLM string.\n//   * line -> must exist in the diff line index. If the LLM's line is wrong,\n//             code_snippet is searched in the real diff lines; nearest match wins.\n// Unpinnable issues: UNANCHORED_MODE = 'drop' | 'file' (file-level, real path).\n//\n// IMPORTANT: only literal $('Node Name') calls in this node. A dynamic $(name)\n// makes the task runner ship the ENTIRE execution data (all LLM sub-node runs)\n// and the node hangs.\n// ============================================================================\n\nconst cfg = $('Config').first().json;\nconst chunkItems = $('Build Review Context').all().map(i => i.json);\nconst rulesText = chunkItems[0]?.repoRules || '';\n\nconst num = (v, d) => (Number.isFinite(Number(v)) && String(v).trim() !== '' ? Number(v) : d);\nconst UNANCHORED_MODE = cfg.UNANCHORED_MODE || 'drop';\nconst NEAR_WINDOW = num(cfg.LINE_TOLERANCE, 3);\nconst MIN_CONFIDENCE = num(cfg.MIN_CONFIDENCE, 0.5);\nconst CONTEXT_RADIUS = 8;\n\n// ---------- merge per-chunk context ----------------------------------------\nconst files = chunkItems.flatMap(c => c.files || []);\nconst lineIndex = Object.assign({}, ...chunkItems.map(c => c.lineIndex || {}));\nconst byFid = Object.fromEntries(files.map(f => [f.fid.toUpperCase(), f]));\nconst byPath = Object.fromEntries(files.map(f => [f.path, f]));\n\n// ---------- parse agent output robustly ------------------------------------\nfunction extractIssues(out) {\n  if (Array.isArray(out)) return out;\n  if (out && typeof out === 'object') {\n    if (Array.isArray(out.issues)) return out.issues;\n    if (out.output !== undefined) return extractIssues(out.output);\n    return null;\n  }\n  if (typeof out !== 'string') return null;\n  let s = out.replace(/<think>[\\s\\S]*?<\\/think>/gi, '').replace(/```(?:json)?/gi, '').trim();\n  for (const [open, close] of [['{', '}'], ['[', ']']]) {\n    const a = s.indexOf(open), b = s.lastIndexOf(close);\n    if (a !== -1 && b > a) {\n      try { const r = extractIssues(JSON.parse(s.slice(a, b + 1))); if (r) return r; } catch (e) { /* next */ }\n    }\n  }\n  return null;   // null = unparseable (different from \"no issues\")\n}\n\n// ---------- collect reviewer outputs (literal node names only) -------------\n// .all() throws when the node did not run; empty also means \"did not run\"\n// (an agent emits one item per input chunk, errors included).\nconst safeAll = fn => { try { const a = fn(); return a && a.length ? a.map(i => i.json) : null; } catch (e) { return null; } };\nconst REVIEWERS = [\n  { source: 'general', items: safeAll(() => $('AI Code Reviewer').all()) },\n  { source: 'rules',   items: safeAll(() => $('AI Rules Reviewer').all()) },\n];\n\nconst report = { chunks: chunkItems.length, rulesReview: rulesText ? 'not run' : 'skipped (no rules)',\n                 failedChunks: [], received: { general: 0, rules: 0 }, lowConfidence: 0,\n                 anchored: 0, relocated: 0, fileLevel: 0, duplicates: 0, dropped: [] };\nconst issues = [];\n\nfor (const r of REVIEWERS) {\n  const agentItems = r.items;\n  if (!agentItems) continue;\n  if (r.source === 'rules') report.rulesReview = 'ran';\n  agentItems.forEach((a, i) => {\n    const chunkNo = chunkItems[i]?.chunkIndex ?? i + 1;\n    const chunkFiles = (chunkItems[i]?.files || []).map(f => f.path);\n    if (a.error) {\n      report.failedChunks.push({ source: r.source, chunk: chunkNo, files: chunkFiles, error: String(a.error.message || a.error).slice(0, 300) });\n      return;\n    }\n    const parsed = extractIssues(a.output !== undefined ? a.output : a);\n    if (parsed === null) {\n      report.failedChunks.push({ source: r.source, chunk: chunkNo, files: chunkFiles, error: 'agent output was not valid JSON' });\n      return;\n    }\n    parsed.forEach(x => issues.push({ ...x, _chunk: chunkNo, _source: r.source }));\n    report.received[r.source] += parsed.length;\n  });\n}\n\n// ---------- location resolution --------------------------------------------\nconst norm = s => String(s ?? '').replace(/\\s+/g, ' ').trim();\n\nfunction resolveFile(issue) {\n  const fid = String(issue.file_id ?? '').trim().toUpperCase();\n  if (byFid[fid]) return { file: byFid[fid], how: 'file_id' };\n  const p = String(issue.path ?? issue.file ?? '').trim().replace(/^\\/+/, '').replace(/^[ab]\\//, '');\n  if (!p) return null;\n  if (byPath[p]) return { file: byPath[p], how: 'exact_path' };\n  const cands = files.filter(f => f.path.endsWith('/' + p) || p.endsWith('/' + f.path));\n  return cands.length === 1 ? { file: cands[0], how: 'suffix_path' } : null;\n}\n\nfunction resolveLine(path, claimed, snippet) {\n  const idx = lineIndex[path] || {};\n  const claimedNum = Number.parseInt(claimed, 10);\n  const snip = norm(snippet);\n  const entry = idx[String(claimedNum)];\n  const t = entry ? norm(entry.text) : '';\n\n  if (entry && (!snip || t.includes(snip) || (t.length > 3 && snip.includes(t)))) {\n    return { line: claimedNum, lineType: entry.lineType, how: 'exact' };\n  }\n  if (snip.length >= 4) {\n    const hits = Object.entries(idx)\n      .filter(([, v]) => norm(v.text).includes(snip) || (norm(v.text).length > 8 && snip.includes(norm(v.text))))\n      .map(([n, v]) => ({ n: Number(n), v }))\n      .sort((x, y) =>\n        (x.v.lineType === 'ADDED' ? 0 : 1) - (y.v.lineType === 'ADDED' ? 0 : 1) ||\n        Math.abs(x.n - (claimedNum || 0)) - Math.abs(y.n - (claimedNum || 0)));\n    if (hits.length) return { line: hits[0].n, lineType: hits[0].v.lineType, how: 'snippet_relocated' };\n  }\n  if (!snip && Number.isFinite(claimedNum)) {\n    for (let d = 1; d <= NEAR_WINDOW; d++) {\n      for (const n of [claimedNum - d, claimedNum + d]) {\n        if (idx[String(n)]?.lineType === 'ADDED') return { line: n, lineType: 'ADDED', how: `nearest_added(${d})` };\n      }\n    }\n  }\n  return null;\n}\n\nfunction codeContext(path, line) {\n  const idx = lineIndex[path] || {};\n  if (!line) return '(file-level issue, no inline context)';\n  const out = [];\n  for (let n = line - CONTEXT_RADIUS; n <= line + CONTEXT_RADIUS; n++) {\n    const e = idx[String(n)];\n    if (e) out.push(`${n === line ? '>>' : '  '}${e.lineType === 'ADDED' ? '+' : ' '}${String(n).padStart(6)} | ${e.text}`);\n  }\n  return out.join('\\n');\n}\n\n// ---------- build candidates -----------------------------------------------\nconst seen = new Set();\nconst candidates = [];\n\nfor (const issue of issues) {\n  const source = issue._source;\n  const conf = Number(issue.confidence);\n  if (Number.isFinite(conf) && conf < MIN_CONFIDENCE) { report.lowConfidence++; continue; }\n\n  let f = resolveFile(issue);\n  let loc = f ? resolveLine(f.file.path, issue.line, issue.code_snippet) : null;\n\n  // wrong / unknown file id: accept another file only if the snippet matches lines in exactly ONE file of the PR\n  if (!loc && norm(issue.code_snippet).length >= 10) {\n    const owners = files.filter(x => (!f || x.path !== f.file.path) && resolveLine(x.path, null, issue.code_snippet));\n    if (owners.length === 1) {\n      f = { file: owners[0], how: 'snippet_file_match' };\n      loc = resolveLine(f.file.path, issue.line, issue.code_snippet);\n    }\n  }\n\n  if (!f) { report.dropped.push({ source, reason: 'unknown file', path: issue.path, file_id: issue.file_id, title: issue.title }); continue; }\n  const path = f.file.path;   // <- from the diff, never from the LLM\n\n  if (!loc && UNANCHORED_MODE !== 'file') {\n    report.dropped.push({ source, reason: 'line not in diff', path, line: issue.line, title: issue.title });\n    continue;\n  }\n  const line = loc ? loc.line : null;\n  const key = `${source}:${path}:${line ?? 'file'}:${norm(issue.title).toLowerCase()}`;\n  if (seen.has(key)) { report.duplicates++; continue; }\n  seen.add(key);\n\n  if (!loc) report.fileLevel++;\n  else if (loc.how === 'exact') report.anchored++;\n  else report.relocated++;\n\n  candidates.push({\n    id: `C${candidates.length + 1}`,\n    source,\n    rule: source === 'rules' ? norm(issue.rule).slice(0, 400) : null,\n    path, srcPath: f.file.srcPath, line, lineType: loc?.lineType ?? null,\n    resolution: `${f.how}/${loc ? loc.how : 'file_level'}`,\n    claimedLine: issue.line ?? null,\n    severity: String(issue.severity || 'medium').toLowerCase(),\n    category: issue.category || (source === 'rules' ? 'repo-rule' : null),\n    confidence: Number.isFinite(conf) ? conf : null,\n    title: norm(issue.title) || 'Issue',\n    description: String(issue.description || '').trim(),\n    suggestion: String(issue.suggestion || '').trim(),\n    context: codeContext(path, line),\n  });\n}\n\n// ---------- prompt for the verification pass -------------------------------\nconst hasRuleCandidates = candidates.some(c => c.source === 'rules');\nconst verifyPrompt =\n  (hasRuleCandidates ? `REVIEW RULES (judge RULE VIOLATION candidates only against these):\\n${rulesText}\\n\\n` : '') +\n  'Candidate issues:\\n\\n' +\n  candidates.map(c =>\n    `=== ${c.id} | ${c.source === 'rules' ? 'RULE VIOLATION' : 'CODE ISSUE'} | ${c.severity.toUpperCase()} | ${c.path}${c.line ? `:${c.line}` : ''}\\n` +\n    (c.rule ? `Rule: ${c.rule}\\n` : '') +\n    `Title: ${c.title}\\nClaim: ${c.description}\\n` +\n    (c.suggestion ? `Suggested fix: ${c.suggestion}\\n` : '') +\n    `Code (>> marks the commented line, + = added in this PR):\\n${c.context}\\n`).join('\\n');\n\nreturn [{ json: { hasCandidates: candidates.length > 0, candidates, verifyPrompt, report } }];\n"
+        "jsCode": "// ============================================================================\n// n8n Code node: \"Resolve Anchors\"   (Mode: Run Once for All Items)\n//\n// Collects the results of BOTH reviewers and outputs ONE item with all candidates.\n//   AI Code Reviewer  -> source 'general'\n//   AI Rules Reviewer -> source 'rules'   (only when repo rules exist)\n// The LLM's location is treated as a HINT only:\n//   * path -> always taken from the parsed diff (file_id lookup, or the LLM's\n//             path matched against real diff paths). Never the raw LLM string.\n//   * line -> must exist in the diff line index. If the LLM's line is wrong,\n//             code_snippet is searched in the real diff lines; nearest match wins.\n// Unpinnable issues: UNANCHORED_MODE = 'drop' | 'file' (file-level, real path).\n//\n// IMPORTANT: only literal $('Node Name') calls in this node. A dynamic $(name)\n// makes the task runner ship the ENTIRE execution data (all LLM sub-node runs)\n// and the node hangs.\n// ============================================================================\n\nconst cfg = $('Config').first().json;\nconst chunkItems = $('Build Review Context').all().map(i => i.json);\nconst rulesText = chunkItems[0]?.repoRules || '';\n\nconst num = (v, d) => (Number.isFinite(Number(v)) && String(v).trim() !== '' ? Number(v) : d);\nconst UNANCHORED_MODE = cfg.UNANCHORED_MODE || 'drop';\nconst NEAR_WINDOW = num(cfg.LINE_TOLERANCE, 3);\nconst MIN_CONFIDENCE = num(cfg.MIN_CONFIDENCE, 0.5);\nconst CONTEXT_RADIUS = 8;\n\n// ---------- merge per-chunk context ----------------------------------------\nconst files = chunkItems.flatMap(c => c.files || []);\nconst lineIndex = Object.assign({}, ...chunkItems.map(c => c.lineIndex || {}));\nconst byFid = Object.fromEntries(files.map(f => [f.fid.toUpperCase(), f]));\nconst byPath = Object.fromEntries(files.map(f => [f.path, f]));\n\n// ---------- parse agent output robustly ------------------------------------\nfunction extractIssues(out) {\n  if (Array.isArray(out)) return out;\n  if (out && typeof out === 'object') {\n    if (Array.isArray(out.issues)) return out.issues;\n    if (out.output !== undefined) return extractIssues(out.output);\n    return null;\n  }\n  if (typeof out !== 'string') return null;\n  let s = out.replace(/<think>[\\s\\S]*?<\\/think>/gi, '').replace(/```(?:json)?/gi, '').trim();\n  for (const [open, close] of [['{', '}'], ['[', ']']]) {\n    const a = s.indexOf(open), b = s.lastIndexOf(close);\n    if (a !== -1 && b > a) {\n      try { const r = extractIssues(JSON.parse(s.slice(a, b + 1))); if (r) return r; } catch (e) { /* next */ }\n    }\n  }\n  return null;   // null = unparseable (different from \"no issues\")\n}\n\n// ---------- collect reviewer outputs (literal node names only) -------------\n// .all() throws when the node did not run; empty also means \"did not run\"\n// (an agent emits one item per input chunk, errors included).\nconst safeAll = fn => { try { const a = fn(); return a && a.length ? a.map(i => i.json) : null; } catch (e) { return null; } };\nconst REVIEWERS = [\n  { source: 'general', items: safeAll(() => $('AI Code Reviewer').all()) },\n  { source: 'rules',   items: safeAll(() => $('AI Rules Reviewer').all()) },\n];\n\nconst report = { chunks: chunkItems.length, rulesReview: rulesText ? 'not run' : 'skipped (no rules)',\n                 failedChunks: [], received: { general: 0, rules: 0 }, lowConfidence: 0,\n                 anchored: 0, relocated: 0, fileLevel: 0, duplicates: 0, dropped: [] };\nconst issues = [];\n\nfor (const r of REVIEWERS) {\n  const agentItems = r.items;\n  if (!agentItems) continue;\n  if (r.source === 'rules') report.rulesReview = 'ran';\n  agentItems.forEach((a, i) => {\n    const chunkNo = chunkItems[i]?.chunkIndex ?? i + 1;\n    const chunkFiles = (chunkItems[i]?.files || []).map(f => f.path);\n    if (a.error) {\n      report.failedChunks.push({ source: r.source, chunk: chunkNo, files: chunkFiles, error: String(a.error.message || a.error).slice(0, 300) });\n      return;\n    }\n    const parsed = extractIssues(a.output ?? a.text ?? a);\n    if (parsed === null) {\n      report.failedChunks.push({ source: r.source, chunk: chunkNo, files: chunkFiles, error: 'reviewer output was not valid JSON' });\n      return;\n    }\n    parsed.forEach(x => issues.push({ ...x, _chunk: chunkNo, _source: r.source }));\n    report.received[r.source] += parsed.length;\n  });\n}\n\n// ---------- location resolution --------------------------------------------\nconst norm = s => String(s ?? '').replace(/\\s+/g, ' ').trim();\n\nfunction resolveFile(issue) {\n  const fid = String(issue.file_id ?? '').trim().toUpperCase();\n  if (byFid[fid]) return { file: byFid[fid], how: 'file_id' };\n  const p = String(issue.path ?? issue.file ?? '').trim().replace(/^\\/+/, '').replace(/^[ab]\\//, '');\n  if (!p) return null;\n  if (byPath[p]) return { file: byPath[p], how: 'exact_path' };\n  const cands = files.filter(f => f.path.endsWith('/' + p) || p.endsWith('/' + f.path));\n  return cands.length === 1 ? { file: cands[0], how: 'suffix_path' } : null;\n}\n\nfunction resolveLine(path, claimed, snippet) {\n  const idx = lineIndex[path] || {};\n  const claimedNum = Number.parseInt(claimed, 10);\n  const snip = norm(snippet);\n  const entry = idx[String(claimedNum)];\n  const t = entry ? norm(entry.text) : '';\n\n  if (entry && (!snip || t.includes(snip) || (t.length > 3 && snip.includes(t)))) {\n    return { line: claimedNum, lineType: entry.lineType, how: 'exact' };\n  }\n  if (snip.length >= 4) {\n    const hits = Object.entries(idx)\n      .filter(([, v]) => norm(v.text).includes(snip) || (norm(v.text).length > 8 && snip.includes(norm(v.text))))\n      .map(([n, v]) => ({ n: Number(n), v }))\n      .sort((x, y) =>\n        (x.v.lineType === 'ADDED' ? 0 : 1) - (y.v.lineType === 'ADDED' ? 0 : 1) ||\n        Math.abs(x.n - (claimedNum || 0)) - Math.abs(y.n - (claimedNum || 0)));\n    if (hits.length) return { line: hits[0].n, lineType: hits[0].v.lineType, how: 'snippet_relocated' };\n  }\n  if (!snip && Number.isFinite(claimedNum)) {\n    for (let d = 1; d <= NEAR_WINDOW; d++) {\n      for (const n of [claimedNum - d, claimedNum + d]) {\n        if (idx[String(n)]?.lineType === 'ADDED') return { line: n, lineType: 'ADDED', how: `nearest_added(${d})` };\n      }\n    }\n  }\n  return null;\n}\n\nfunction codeContext(path, line) {\n  const idx = lineIndex[path] || {};\n  if (!line) return '(file-level issue, no inline context)';\n  const out = [];\n  for (let n = line - CONTEXT_RADIUS; n <= line + CONTEXT_RADIUS; n++) {\n    const e = idx[String(n)];\n    if (e) out.push(`${n === line ? '>>' : '  '}${e.lineType === 'ADDED' ? '+' : ' '}${String(n).padStart(6)} | ${e.text}`);\n  }\n  return out.join('\\n');\n}\n\n// ---------- build candidates -----------------------------------------------\nconst seen = new Set();\nconst candidates = [];\n\nfor (const issue of issues) {\n  const source = issue._source;\n  const conf = Number(issue.confidence);\n  if (Number.isFinite(conf) && conf < MIN_CONFIDENCE) { report.lowConfidence++; continue; }\n\n  let f = resolveFile(issue);\n  let loc = f ? resolveLine(f.file.path, issue.line, issue.code_snippet) : null;\n\n  // wrong / unknown file id: accept another file only if the snippet matches lines in exactly ONE file of the PR\n  if (!loc && norm(issue.code_snippet).length >= 10) {\n    const owners = files.filter(x => (!f || x.path !== f.file.path) && resolveLine(x.path, null, issue.code_snippet));\n    if (owners.length === 1) {\n      f = { file: owners[0], how: 'snippet_file_match' };\n      loc = resolveLine(f.file.path, issue.line, issue.code_snippet);\n    }\n  }\n\n  if (!f) { report.dropped.push({ source, reason: 'unknown file', path: issue.path, file_id: issue.file_id, title: issue.title }); continue; }\n  const path = f.file.path;   // <- from the diff, never from the LLM\n\n  if (!loc && UNANCHORED_MODE !== 'file') {\n    report.dropped.push({ source, reason: 'line not in diff', path, line: issue.line, title: issue.title });\n    continue;\n  }\n  const line = loc ? loc.line : null;\n  const key = `${source}:${path}:${line ?? 'file'}:${norm(issue.title).toLowerCase()}`;\n  if (seen.has(key)) { report.duplicates++; continue; }\n  seen.add(key);\n\n  if (!loc) report.fileLevel++;\n  else if (loc.how === 'exact') report.anchored++;\n  else report.relocated++;\n\n  candidates.push({\n    id: `C${candidates.length + 1}`,\n    source,\n    rule: source === 'rules' ? norm(issue.rule).slice(0, 400) : null,\n    path, srcPath: f.file.srcPath, line, lineType: loc?.lineType ?? null,\n    resolution: `${f.how}/${loc ? loc.how : 'file_level'}`,\n    claimedLine: issue.line ?? null,\n    severity: String(issue.severity || 'medium').toLowerCase(),\n    category: issue.category || (source === 'rules' ? 'repo-rule' : null),\n    confidence: Number.isFinite(conf) ? conf : null,\n    title: norm(issue.title) || 'Issue',\n    description: String(issue.description || '').trim(),\n    suggestion: String(issue.suggestion || '').trim(),\n    context: codeContext(path, line),\n  });\n}\n\n// ---------- prompt for the verification pass -------------------------------\nconst hasRuleCandidates = candidates.some(c => c.source === 'rules');\nconst verifyPrompt =\n  (hasRuleCandidates ? `REVIEW RULES (judge RULE VIOLATION candidates only against these):\\n${rulesText}\\n\\n` : '') +\n  'Candidate issues:\\n\\n' +\n  candidates.map(c =>\n    `=== ${c.id} | ${c.source === 'rules' ? 'RULE VIOLATION' : 'CODE ISSUE'} | ${c.severity.toUpperCase()} | ${c.path}${c.line ? `:${c.line}` : ''}\\n` +\n    (c.rule ? `Rule: ${c.rule}\\n` : '') +\n    `Title: ${c.title}\\nClaim: ${c.description}\\n` +\n    (c.suggestion ? `Suggested fix: ${c.suggestion}\\n` : '') +\n    `Code (>> marks the commented line, + = added in this PR):\\n${c.context}\\n`).join('\\n');\n\nreturn [{ json: { hasCandidates: candidates.length > 0, candidates, verifyPrompt, report } }];\n"
       },
       "id": "056bf4c3-a736-4910-88be-e57406c130e6",
       "name": "Resolve Anchors",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2700,
+        3140,
         220
       ],
       "notes": "Uses only literal $('Node Name') calls - a dynamic $(name) makes the task runner ship the whole execution data and the node hangs."
@@ -728,7 +634,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        2920,
+        3360,
         220
       ]
     },
@@ -749,7 +655,7 @@
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.5,
       "position": [
-        3140,
+        3580,
         120
       ],
       "onError": "continueRegularOutput",
@@ -777,7 +683,7 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.2,
       "position": [
-        3140,
+        3580,
         340
       ],
       "credentials": {
@@ -796,7 +702,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3380,
+        3820,
         220
       ]
     },
@@ -829,7 +735,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        3600,
+        4040,
         220
       ]
     },
@@ -857,7 +763,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3840,
+        4280,
         120
       ],
       "credentials": {
@@ -902,7 +808,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3840,
+        4280,
         400
       ],
       "credentials": {
@@ -915,6 +821,56 @@
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// n8n Code node: \"List Changed Files\"   (Mode: Run Once for All Items)\n//\n// One item per changed file worth reviewing, so \"Get Changed File\" can fetch\n// its full content at the PR source commit. Same filters as \"Build Review Context\".\n// ============================================================================\nconst cfg = $('Config').first().json;\nconst IGNORE = String(cfg.IGNORE_PATH_REGEX || '')\n  .split(',').map(s => s.trim()).filter(Boolean).map(s => new RegExp(s));\nconst pathOf = ref => (ref && (ref.toString || (ref.components || []).join('/'))) || null;\n\nreturn ($input.first().json.diffs || [])\n  .map(d => ({ path: pathOf(d.destination), binary: d.binary }))\n  .filter(f => f.path && !f.binary && !IGNORE.some(rx => rx.test(f.path)))\n  .map(f => ({ json: { path: f.path } }));\n"
+      },
+      "id": "5edf2035-c9cf-4d3d-903d-1baf155aade4",
+      "name": "List Changed Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Config').first().json.BB_BASE_URL }}/rest/api/1.0/projects/{{ $('Config').first().json.PROJECT }}/repos/{{ $('Config').first().json.REPO }}/raw/{{ encodeURI($json.path) }}?at={{ $('Config').first().json.FROM_HASH }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "e947ccfc-3894-4adb-8774-807fb9730dc0",
+      "name": "Get Changed File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        220
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "REPLACE_BB",
+          "name": "Bitbucket Basic Auth"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "notes": "Full file content at the PR source commit, one request per changed file. A failed fetch falls back to the plain diff for that file."
     }
   ],
   "connections": {
@@ -955,7 +911,7 @@
       "main": [
         [
           {
-            "node": "Build Review Context",
+            "node": "List Changed Files",
             "type": "main",
             "index": 0
           }
@@ -1134,28 +1090,6 @@
         ]
       ]
     },
-    "get_file_content": {
-      "ai_tool": [
-        [
-          {
-            "node": "AI Code Reviewer",
-            "type": "ai_tool",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "list_files": {
-      "ai_tool": [
-        [
-          {
-            "node": "AI Code Reviewer",
-            "type": "ai_tool",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Auto-fixing Output Parser": {
       "ai_outputParser": [
         [
@@ -1200,28 +1134,6 @@
         ]
       ]
     },
-    "rules_get_file_content": {
-      "ai_tool": [
-        [
-          {
-            "node": "AI Rules Reviewer",
-            "type": "ai_tool",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "rules_list_files": {
-      "ai_tool": [
-        [
-          {
-            "node": "AI Rules Reviewer",
-            "type": "ai_tool",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Rules Auto-fixing Output Parser": {
       "ai_outputParser": [
         [
@@ -1261,6 +1173,28 @@
           {
             "node": "Verify Issues",
             "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Changed Files": {
+      "main": [
+        [
+          {
+            "node": "Get Changed File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Changed File": {
+      "main": [
+        [
+          {
+            "node": "Build Review Context",
+            "type": "main",
             "index": 0
           }
         ]
